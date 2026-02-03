@@ -1,12 +1,24 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Alien Invasion</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Slime Pop — Touch Tester</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameScreen" class="screen">
+        <canvas id="gameCanvas"></canvas>
+        <div id="gunModeBoxes">
+            <button type="button" id="gunModeTap" class="gun-mode-box active" title="Tap (one shot)">●</button>
+            <button type="button" id="gunModeAuto" class="gun-mode-box" title="Auto 10/sec">10</button>
+            <button type="button" id="gunModeRocket" class="gun-mode-box" title="Rocket – hold 3s, AoE">◎</button>
+        </div>
+        <div id="score">slimes popped: 0</div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
 </html>
