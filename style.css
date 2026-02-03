@@ -37,7 +37,8 @@ body {
     display: block;
     background: #000;
     cursor: crosshair;
-    touch-action: none; /* Prevent browser from handling touches - we handle everything */
+    touch-action: none;
+    /* Prevent browser from handling touches - we handle everything */
     -ms-touch-action: none;
 }
 
@@ -46,42 +47,7 @@ body {
     position: relative;
 }
 
-#gunModeBoxes {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    display: flex;
-    gap: 8px;
-    z-index: 10;
-}
-.gun-mode-box {
-    width: 44px;
-    height: 44px;
-    border: 2px solid rgba(255,255,255,0.5);
-    border-radius: 6px;
-    background: rgba(255,255,255,0.1);
-    color: #fff;
-    font-size: 11px;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-    -webkit-tap-highlight-color: transparent;
-}
-.gun-mode-box:hover {
-    background: rgba(255,255,255,0.2);
-    border-color: rgba(255,255,255,0.7);
-}
-.gun-mode-box.active {
-    background: rgba(255,200,100,0.35);
-    border-color: #ffaa00;
-    color: #fff;
-}
-.gun-mode-box:active {
-    transform: scale(0.95);
-}
+/* Gun modes removed */
 
 #score {
     position: absolute;
@@ -92,4 +58,3 @@ body {
     z-index: 10;
     transition: transform 0.15s ease;
 }
-
