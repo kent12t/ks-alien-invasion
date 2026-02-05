@@ -1,79 +1,186 @@
-
 // Game Configuration
-const CONFIG = {
-    SPAWN_RATE: 2000,
-    AOE_RADIUS: 250,  // Slightly larger for better feel
-    COLORS: {
-        EXPLOSION: '#ffffff',
-        AOE_RING: 'rgba(255, 200, 50, 0.5)'
-    },
-    Z_START: 3000,     // Start further back
-    Z_SPEED: 5,        // Slower approach (was 8)
-    FOCAL_LENGTH: 400,
-    MIN_SCALE: 0.1,
-    FLOOR_Y: 400,      // World units below eye level (camera height)
-    MAX_HIT_Z: 1200,   // Pirates beyond this Z are immune (too far)
-    MIN_HIT_Z: -200,   // Don't hit things behind camera
-    STOP_Z: 100,       // Pirates stop at this Z depth (front of screen)
-    ANIMATION: {
-        FRAME_COUNT_CAPTAIN: 121, // 0 to 120
-        FRAME_COUNT_MINION: 121
-    }
-};
+// Game Configuration is now loaded from config.js
 
-// Asset Manager
-const assets = {
-    // Statics (Fallback)
-    ship: new Image(),
-    kraken: new Image(),
+// Global App State
+let app;
+let shadowContainer; // Layer for shadows (bottom)
+let gameContainer;   // Layer for sprites (middle)
+let uiContainer;     // Layer for UI (top)
+let pirates = [];
+let explosions = [];
+let clickEffects = [];
+let score = 0;
+let lastSpawnTime = 0;
+let soundManager;
+const inputQueue = [];
+let debugFPS = 60;
+let lastFrameTimeMs = 0;
 
-    // Sequences
+// Asset Storage
+const resources = {
+    // Arrays of PIXI.Texture
     captainFrames: [],
     minionFrames: [],
-
     parts: [],
-    loaded: 0
+    // Static Fallback Textures
+    ship: null,
+    kraken: null,
+    floor: null,
+    loaded: false
 };
 
-function loadAssets() {
-    // Load Static Fallbacks
-    assets.ship.src = 'assets/pirate_ship.png';
-    assets.kraken.src = 'assets/kraken.png';
+let bgSprite;
 
-    // Helper to load sequence
-    // Folder: assets/CaptainPngSeq/captain_00000.png
-    const loadSequence = (folderName, prefix, count, targetArray) => {
+async function initPixi() {
+    const canvasElement = document.getElementById('gameCanvas');
+
+    // Create Pixi Application
+    app = new PIXI.Application({
+        view: canvasElement,
+        resizeTo: window,
+        backgroundColor: 0x000000, // Black
+        antialias: true,
+        autoDensity: true,
+        resolution: window.devicePixelRatio || 1
+    });
+
+    // Create Layers (Order matters!)
+    shadowContainer = new PIXI.Container();
+    // shadowContainer.sortableChildren = true; // Optional, if we want shadows to sort distantly
+    app.stage.addChild(shadowContainer);
+
+    gameContainer = new PIXI.Container();
+    gameContainer.sortableChildren = true; // Enable Z-Sorting
+    app.stage.addChild(gameContainer);
+
+    uiContainer = new PIXI.Container();
+    app.stage.addChild(uiContainer);
+
+    // Initial Loading Text
+    const loadingStyle = new PIXI.TextStyle({
+        fill: '#ffffff',
+        fontFamily: 'monospace',
+        fontSize: 24
+    });
+    const loadingText = new PIXI.Text('Loading Assets...', loadingStyle);
+    loadingText.anchor.set(0.5);
+    loadingText.x = app.screen.width / 2;
+    loadingText.y = app.screen.height / 2;
+    uiContainer.addChild(loadingText);
+
+    // Setup Inputs
+    setupEventListeners();
+    soundManager = new SoundManager();
+
+    // Load Assets
+    await loadAssets();
+
+    // Start Game
+    resources.loaded = true;
+    uiContainer.removeChild(loadingText);
+    setupDebugUI();
+
+    // Game Loop via Pixi Ticker
+    // Game Loop via Pixi Ticker
+    app.ticker.add(gameLoop);
+
+    // Init BG if loaded
+    if (resources.floor) {
+        bgSprite = new PIXI.Sprite(resources.floor);
+        bgSprite.anchor.set(0.5);
+        resizeBackground();
+        app.stage.addChildAt(bgSprite, 0); // Add at index 0 (bottom)
+    }
+
+    // Resize Handler for BG
+    window.addEventListener('resize', () => {
+        if (bgSprite) resizeBackground();
+    });
+}
+
+function resizeBackground() {
+    if (!bgSprite) return;
+    const sw = app.screen.width;
+    const sh = app.screen.height;
+    const tex = bgSprite.texture;
+
+    // Cover Logic
+    const scale = Math.max(sw / tex.width, sh / tex.height);
+    bgSprite.scale.set(scale);
+    bgSprite.x = sw / 2;
+    bgSprite.y = sh / 2;
+}
+
+async function loadAssets() {
+    // 1. Textures for Static
+    // Use PIXI.Assets.load to ensure dimensions are ready for resize logic
+    resources.ship = await PIXI.Assets.load('assets/pirate_ship.png');
+    resources.kraken = await PIXI.Assets.load('assets/kraken.png');
+    resources.floor = await PIXI.Assets.load('assets/FloorBG.png');
+
+    // 2. Texture Sequences
+    const loadSequence = async (folder, prefix, count, targetArray) => {
         for (let i = 0; i < count; i++) {
-            const img = new Image();
-            // Pad index to 5 digits: 0 -> 00000
             const indexStr = i.toString().padStart(5, '0');
-            img.src = `assets/${folderName}/${prefix}_${indexStr}.png`;
-            targetArray.push(img);
+            const path = `assets/${folder}/${prefix}_${indexStr}.png`;
+            // For sequences, Texture.from is faster/easier as exact frame timing isn't critical
+            // and we don't want to await 240 HTTP requests strictly if not needed.
+            // But to be consistent and prevent pop-in, let's stick to from() but maybe pre-load?
+            // Actually, keep Texture.from for sequences to avoid massive load times blocking start
+            // unless we want to batch load.
+            const texture = PIXI.Texture.from(path);
+            targetArray.push(texture);
         }
     };
 
     if (CONFIG.ANIMATION) {
-        loadSequence('CaptainPngSeq', 'captain', CONFIG.ANIMATION.FRAME_COUNT_CAPTAIN, assets.captainFrames);
-        loadSequence('MinionPngSeq', 'minion', CONFIG.ANIMATION.FRAME_COUNT_MINION, assets.minionFrames);
+        // We run these in parallel-ish
+        const p1 = loadSequence('CaptainPngSeq', 'captain', CONFIG.ANIMATION.FRAME_COUNT_CAPTAIN, resources.captainFrames);
+        const p2 = loadSequence('MinionPngSeq', 'minion', CONFIG.ANIMATION.FRAME_COUNT_MINION, resources.minionFrames);
+        await Promise.all([p1, p2]);
     }
 
-    // Load Part Images
-    const partCount = 14;
-    for (let i = 0; i < partCount; i++) {
-        const img = new Image();
-        img.src = `assets/part${i}.png`;
-        assets.parts.push(img);
+    // 3. Parts
+    for (let i = 0; i < 14; i++) {
+        const t = await PIXI.Texture.from(`assets/part${i}.png`);
+        resources.parts.push(t);
     }
 }
 
-// Sound Manager (Simplified)
+// Setup Debug UI
+let fpsText;
+let countText;
+function setupDebugUI() {
+    const style = new PIXI.TextStyle({
+        fill: '#00ff00',
+        fontFamily: 'monospace',
+        fontSize: 14,
+        fontWeight: 'bold',
+        dropShadow: true,
+        dropShadowColor: '#000000',
+        dropShadowBlur: 4,
+        dropShadowDistance: 0
+    });
+
+    fpsText = new PIXI.Text('FPS: 0', style);
+    fpsText.x = 10;
+    fpsText.y = 10;
+    uiContainer.addChild(fpsText);
+
+    countText = new PIXI.Text('Entities: 0', style);
+    countText.x = 10;
+    countText.y = 30;
+    uiContainer.addChild(countText);
+}
+
+// Sound Manager (Same as before)
 class SoundManager {
     constructor() {
         this.audioContext = null;
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         } catch (e) {
-            console.warn('Web Audio API not supported');
+            // console.warn('Web Audio API not supported');
         }
     }
 
@@ -103,106 +210,88 @@ class SoundManager {
         const noise = this.audioContext.createBufferSource();
         noise.buffer = buffer;
         const gain = this.audioContext.createGain();
-
-        // Low pass filter for "thud" sound
         const filter = this.audioContext.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 800;
-
         noise.connect(filter);
         filter.connect(gain);
         gain.connect(this.audioContext.destination);
-
         gain.gain.setValueAtTime(0.8, this.audioContext.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
         noise.start();
     }
 }
 
-// Game State
-let gameState = 'playing';
-let canvas, ctx;
-let pirates = [];
-let explosions = [];
-let clickEffects = [];
-let score = 0;
-let lastSpawnTime = 0;
-let soundManager;
-const inputQueue = [];
-let debugFPS = 60;
-let lastFrameTimeMs = 0;
-
-// UI Elements
-const scoreDisplay = document.getElementById('score');
-
-// Initialize Canvas
-function initCanvas() {
-    canvas = document.getElementById('gameCanvas');
-    ctx = canvas.getContext('2d');
-
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    setupEventListeners();
-    loadAssets();
-}
-
-// Setup Event Listeners
 function setupEventListeners() {
-    if (!canvas) return;
-
     function queueInput(x, y) {
-        inputQueue.push({ x: x, y: y, t: performance.now() });
+        inputQueue.push({ x: x, y: y });
     }
-
-    canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-    }, { passive: false, capture: true });
-
-    canvas.addEventListener('pointerdown', (e) => {
+    const c = app.view;
+    c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    c.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         queueInput(e.clientX, e.clientY);
-    }, { passive: false, capture: true });
+    }, { capture: true });
+    c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+    c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
+    // Resize Handling
+    window.addEventListener('resize', () => {
+        // Pixi handles resizeTo: window automatically, but we might need to update center point logic if we cached it
+    });
 }
 
-// Pirate Class (Sprite Sequence Animation)
+// ------------------------------------------------------------------
+// PIXI ENTITIES
+// ------------------------------------------------------------------
+
 class Pirate {
     constructor() {
         this.type = Math.random() > 0.5 ? 'captain' : 'minion';
 
-        // Select Frames or Fallback
-        const frames = this.type === 'captain' ? assets.captainFrames : assets.minionFrames;
-        const staticFallback = this.type === 'captain' ? assets.ship : assets.kraken;
+        // Shadow Setup (Back Layer)
+        this.shadow = new PIXI.Graphics();
+        this.shadow.beginFill(0x000000, 0.3); // Black, 30% opacity
+        this.shadow.drawEllipse(0, 0, 100, 30); // Base size oval
+        this.shadow.endFill();
+        shadowContainer.addChild(this.shadow); // Add to Shadow Layer
 
-        this.frames = frames;
-        this.fallback = staticFallback;
-        this.frameCount = frames.length;
+        // Sprite Setup (Front Layer)
+        this.sprite = new PIXI.Sprite();
+        this.sprite.anchor.set(0.5, 1.0); // Bottom Center
+        gameContainer.addChild(this.sprite);
 
-        // Animation State
-        this.frameIndex = Math.random() * this.frameCount; // Random start
-        this.animSpeed = 0.3 + Math.random() * 0.2; // Speed
+        // Assets
+        this.frames = this.type === 'captain' ? resources.captainFrames : resources.minionFrames;
+        this.fallback = this.type === 'captain' ? resources.ship : resources.kraken;
+        this.frameCount = this.frames.length;
+
+        // Visual Init
+        this.sprite.texture = this.fallback; // Start fallback, replace in update
+
+        // Logic
+        this.initLogic();
+    }
+
+    initLogic() {
+        this.frameIndex = Math.random() * this.frameCount;
+
+        // Fixed Animation Speed: 30 FPS (0.5 frames per 60hz tick)
+        this.animSpeed = 0.5;
+
         this.animDir = 1;
 
-        // Horizontal Constraint Logic
+        // Pathing Math (Same as original)
         const stopPerspective = Math.max(0.01, CONFIG.FOCAL_LENGTH + CONFIG.STOP_Z);
         const stopScale = CONFIG.FOCAL_LENGTH / stopPerspective;
 
         // Define Safe Screen Width
-        const margin = -150;
-        const safeWidthHalf = (canvas.width / 2) - margin;
+        // margin = positive value to keep them INSIDE the screen
+        const margin = CONFIG.SPAWN_MARGIN;
+        const safeWidthHalf = (app.screen.width / 2) - margin;
+        const maxWorldX = Math.max(0, safeWidthHalf / stopScale);
 
-        // Back-calculate Max World X
-        const maxWorldX = safeWidthHalf / stopScale;
-
-        // Base World X (Center of path)
         this.baseWorldX = (Math.random() - 0.5) * 2 * maxWorldX;
         this.worldX = this.baseWorldX; // Current X
 
@@ -239,38 +328,32 @@ class Pirate {
     }
 
     update() {
-        // 1. Z-Position Update
-        if (this.z > this.stopZ) {
-            this.z -= this.speed;
-        } else {
-            this.z = this.stopZ;
-        }
+        // z move
+        if (this.z > this.stopZ) this.z -= this.speed;
+        else this.z = this.stopZ;
 
-        // 2. X-Position Update (Wiggle)
-        // Move back and forth around base line
+        // x wander
         this.wanderPhase += this.wanderSpeed;
         this.worldX = this.baseWorldX + Math.sin(this.wanderPhase) * this.wanderAmp;
 
-        // 3. Jump Logic
+        // y jump
         if (this.isJumping) {
-            this.jumpY += this.jumpVy; // Move up/down
-            this.jumpVy -= this.gravity; // Apply gravity
-
-            // Land on floor
+            this.jumpY += this.jumpVy;
+            this.jumpVy -= this.gravity;
             if (this.jumpY <= 0) {
                 this.jumpY = 0;
                 this.isJumping = false;
-                this.nextJumpTime = 60 + Math.random() * 240; // Random cooldown
+                this.nextJumpTime = 60 + Math.random() * 240;
             }
         } else {
             this.nextJumpTime--;
             if (this.nextJumpTime <= 0) {
                 this.isJumping = true;
-                this.jumpVy = 15 + Math.random() * 10; // Jump strength
+                this.jumpVy = 15 + Math.random() * 10;
             }
         }
 
-        // 4. Animation Frame Update (Ping-Pong)
+        // Animation
         if (this.frameCount > 0) {
             this.frameIndex += this.animSpeed * this.animDir;
             if (this.frameIndex >= this.frameCount - 1) {
@@ -282,230 +365,271 @@ class Pirate {
             }
         }
 
-        // 5. Projection to Screen
+        // Projection
         const perspective = Math.max(0.01, CONFIG.FOCAL_LENGTH + this.z);
         this.scale = (CONFIG.FOCAL_LENGTH / perspective) * this.sizeMultiplier;
 
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
+        const cx = app.screen.width / 2;
+        const cy = app.screen.height / 2;
 
-        this.screenX = centerX + this.worldX * this.scale;
+        this.screenX = cx + this.worldX * this.scale;
 
-        // screenY = (FloorLevel - jumpHeight) * scale
-        // worldY is "distance down from horizon". Jumping effectively reduces this distance (moves closer to horizon/up).
+        // Shadow Y (Always on floor)
+        const shadowScreenY = cy + this.worldY * this.scale;
+
+        // Sprite Y (Affected by Jump)
         const effectiveWorldY = this.worldY - this.jumpY;
-        this.screenY = centerY + effectiveWorldY * this.scale;
+        this.screenY = cy + effectiveWorldY * this.scale;
 
-        // Size calculation
-        const baseSize = 500;
-        this.radius = (baseSize * this.scale) / 2;
-    }
+        // Update Sprite
+        this.sprite.x = this.screenX;
+        this.sprite.y = this.screenY;
 
-    draw() {
-        if (this.scale <= 0) return;
+        // Update Shadow
+        this.shadow.x = this.screenX;
+        this.shadow.y = shadowScreenY;
 
-        ctx.save();
-        ctx.translate(this.screenX, this.screenY);
-        ctx.scale(this.scale, this.scale);
+        // Shadow Scale: shrinks as they jump higher
+        // Base scale matches sprite scale perspective
+        // Factor: at jumpY=0 -> 1.0. At jumpY=200 -> 0.5?
+        const jumpFactor = Math.max(0.5, 1.0 - (this.jumpY / 300));
+        this.shadow.scale.set(this.scale * jumpFactor);
 
-        // Determine image to draw
-        let img = this.fallback;
-
-        if (this.frameCount > 0) {
-            const currentFrame = this.frames[Math.floor(this.frameIndex)];
-            if (currentFrame && currentFrame.complete && currentFrame.naturalWidth > 0) {
-                img = currentFrame;
-            }
+        // Normalize sprite texture size
+        const tex = this.getCurrentTexture();
+        if (tex) {
+            this.sprite.texture = tex;
+            const w = tex.width || 1000;
+            const h = tex.height || 1000;
+            const norm = 500 / Math.max(w, h);
+            this.sprite.scale.set(this.scale * norm);
+        } else {
+            this.sprite.scale.set(this.scale * 0.5);
         }
 
-        const w = img.width || 300;
-        const h = img.height || 300;
-        const normScale = 500 / Math.max(w, h);
+        // Z-Index for Sorting
+        // Pixi sortableChildren + zIndex.
+        // High Z-Index = Drawn on Top.
+        // We want Close Objects (Low 'z') to be Drawn on Top.
+        // So zIndex should be Higher for Lower z.
+        // zIndex = -z works perfectly.
+        // Shadow should be slightly under sprite
+        this.sprite.zIndex = -this.z;
+        this.shadow.zIndex = -this.z - 0.1;
 
-        ctx.drawImage(img, -w * normScale / 2, -h * normScale, w * normScale, h * normScale);
+        // Visibility
+        this.sprite.alpha = 1.0;
+        this.shadow.alpha = 1.0;
 
-        ctx.restore();
+        // Visual Fog (Depth Tinting)
+        if (CONFIG.FOG && CONFIG.FOG.ENABLED) {
+            // Calculate Fog Factor (0.0 = Clear, 1.0 = Max Fog)
+            let fogFactor = (this.z - CONFIG.FOG.START_Z) / (CONFIG.FOG.END_Z - CONFIG.FOG.START_Z);
+            fogFactor = Math.max(0, Math.min(1, fogFactor)); // Clamp 0-1
+
+            // Interpolate Color (White -> FogColor)
+            // Since tint multiplies, we want 1.0 (0xFF) -> FogColor (0x00) assuming black fog.
+            // If fog is black: value = 1.0 - fogFactor.
+
+            // Simple "Fade to Black" Logic:
+            const val = Math.floor(255 * (1.0 - fogFactor));
+            const tint = (val << 16) | (val << 8) | val;
+
+            this.sprite.tint = tint;
+
+            // Shadow is already black alpha, but we can dim it further or leave it.
+            // Let's tint it too so it fades out completely in pitch black
+            this.shadow.tint = tint;
+        }
+    }
+
+    getCurrentTexture() {
+        if (this.frameCount > 0) {
+            const idx = Math.floor(this.frameIndex);
+            if (this.frames[idx]) return this.frames[idx];
+        }
+        return this.fallback;
+    }
+
+    destroy() {
+        gameContainer.removeChild(this.sprite);
+        this.sprite.destroy();
+        shadowContainer.removeChild(this.shadow);
+        this.shadow.destroy();
     }
 }
 
-// Visual Effect: AoE Ring
 class AoERing {
     constructor(x, y) {
         this.x = x;
         this.y = y;
+        this.g = new PIXI.Graphics();
+        gameContainer.addChild(this.g);
         this.radius = 10;
         this.maxRadius = CONFIG.AOE_RADIUS;
         this.life = 1.0;
+        // Effect should be on top of pirates?
+        this.g.zIndex = 2000; // Very high zIndex
     }
-
     update() {
-        this.life -= 0.06; // Faster decay
+        this.life -= 0.06;
         this.radius += (this.maxRadius - this.radius) * 0.25;
-    }
 
-    draw() {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, this.life);
-        ctx.strokeStyle = '#ffd700'; // Gold
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.stroke();
+        // Draw
+        this.g.clear();
+        this.g.lineStyle(4, 0xFFD700, this.life);
+        this.g.beginFill(0xFFD700, 0.1 * this.life);
+        this.g.drawCircle(this.x, this.y, this.radius);
+        this.g.endFill();
 
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
-        ctx.fill();
-        ctx.restore();
+        if (this.life <= 0) {
+            this.g.clear();
+            gameContainer.removeChild(this.g);
+            this.g.destroy();
+        }
     }
 }
 
-// Visual Effect: Monster Parts Explosion
 class Explosion {
     constructor(x, y) {
         this.x = x;
         this.y = y;
         this.particles = [];
+        this.container = new PIXI.Container();
+        this.container.zIndex = 2000; // Foreground
+        gameContainer.addChild(this.container);
 
         const partCount = 8 + Math.floor(Math.random() * 6);
         for (let i = 0; i < partCount; i++) {
-            // Pick random part image
-            const img = assets.parts.length > 0
-                ? assets.parts[Math.floor(Math.random() * assets.parts.length)]
-                : null;
+            // Random texture
+            let tex = null;
+            if (resources.parts.length > 0) {
+                tex = resources.parts[Math.floor(Math.random() * resources.parts.length)];
+            }
+            if (tex) {
+                const s = new PIXI.Sprite(tex);
+                s.anchor.set(0.5);
 
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 4 + Math.random() * 8;
+                // Configurable Random Size
+                const size = CONFIG.PARTICLE_SIZE_MIN + Math.random() * (CONFIG.PARTICLE_SIZE_MAX - CONFIG.PARTICLE_SIZE_MIN);
+                s.width = size;
+                s.height = size;
 
-            this.particles.push({
-                img: img,
-                x: 0,
-                y: 0,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 5, // Upward burst
-                rotation: Math.random() * Math.PI * 2,
-                rotSpeed: (Math.random() - 0.5) * 0.2,
-                scale: 0.5 + Math.random() * 0.5,
-                life: 1.0
-            });
-        }
-    }
+                // particle physics props
+                const speed = CONFIG.PARTICLE_SPEED_MIN + Math.random() * (CONFIG.PARTICLE_SPEED_MAX - CONFIG.PARTICLE_SPEED_MIN);
+                const angle = Math.random() * 6.28;
 
-    update() {
-        for (let p of this.particles) {
-            if (p.dead) continue;
+                s.userData = {
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 5,
+                    rotSpeed: (Math.random() - 0.5) * 0.2,
+                    dead: false
+                };
 
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.3; // Gravity
-            p.rotation += p.rotSpeed;
-
-            // Shrink to 0 instead of fade
-            p.scale -= 0.025;
-            if (p.scale <= 0) {
-                p.scale = 0;
-                p.dead = true;
+                this.container.addChild(s);
+                this.particles.push(s);
             }
         }
     }
 
-    draw() {
-        ctx.save();
-        ctx.translate(this.x, this.y); // Center at explosion point
-
+    update() {
+        let active = 0;
         for (let p of this.particles) {
-            if (p.dead || !p.img) continue;
+            const d = p.userData;
+            if (d.dead) continue;
 
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate(p.rotation);
-            ctx.scale(p.scale, p.scale);
-            // No globalAlpha fade - keep opacity 1.0 until gone
+            p.x += d.vx;
+            p.y += d.vy;
+            d.vy += 0.3; // Gravity
+            p.rotation += d.rotSpeed;
 
-            const size = 60; // Base part size
-            ctx.drawImage(p.img, -size / 2, -size / 2, size, size);
+            p.scale.x -= 0.025;
+            p.scale.y -= 0.025;
 
-            ctx.restore();
+            if (p.scale.x <= 0) {
+                p.scale.set(0);
+                d.dead = true;
+                p.visible = false;
+            } else {
+                active++;
+            }
         }
-        ctx.restore();
+
+        if (active === 0) {
+            this.destroy();
+        } else {
+            // Sync container pos
+            this.container.x = this.x;
+            this.container.y = this.y;
+        }
     }
 
-    isDead() {
-        return this.particles.every(p => p.dead);
+    destroy() {
+        if (this.container.parent) {
+            gameContainer.removeChild(this.container);
+            this.container.destroy({ children: true });
+        }
+        this.particles = [];
     }
 }
 
 
-function processQueuedInput(x, y) {
-    clickEffects.push(new AoERing(x, y));
-    if (soundManager) soundManager.playShot();
-
-    const hitRadiusSq = CONFIG.AOE_RADIUS * CONFIG.AOE_RADIUS;
-    let hitCount = 0;
-
-    // Iterate backward to allow splicing
-    for (let i = pirates.length - 1; i >= 0; i--) {
-        const p = pirates[i];
-
-        // Z-DEPTH CHECK: Only hit if within valid range
-        if (p.z > CONFIG.MAX_HIT_Z || p.z < CONFIG.MIN_HIT_Z) {
-            continue; // Too far or too close (behind)
-        }
-
-        const dx = x - p.screenX;
-        // Adjust dy to target center (since we draw anchored at bottom)
-        // Approximate center is screenY - (height/2)
-        // But our circle check is rough, using screenY (feet) is closer to where user taps for "ground" usually.
-        // Let's check distance to the drawn sprite center approx:
-        // Sprite height is ~400 * scale. Center is ~200 * scale up.
-        const spriteCenterY = p.screenY - (200 * p.scale);
-        const dy = y - spriteCenterY;
-
-        const distSq = dx * dx + dy * dy;
-
-        if (distSq < hitRadiusSq) {
-            pirates.splice(i, 1);
-            explosions.push(new Explosion(p.screenX, spriteCenterY));
-            hitCount++;
-            score++;
-            scoreDisplay.textContent = `pirates defeated: ${score}`;
-        }
-    }
-
-    if (hitCount > 0 && soundManager) soundManager.playExplosion();
-}
-
-function gameLoop() {
-    if (!canvas || !ctx) return;
-
-    // Inputs
+function processInputs() {
     while (inputQueue.length > 0) {
         const input = inputQueue.shift();
-        processQueuedInput(input.x, input.y);
+        const x = input.x;
+        const y = input.y;
+
+        clickEffects.push(new AoERing(x, y));
+        if (soundManager) soundManager.playShot();
+
+        const hitRadiusSq = CONFIG.AOE_RADIUS * CONFIG.AOE_RADIUS;
+        let hitCount = 0;
+
+        // Check hits
+        // Reverse iterate for splicing safely
+        for (let i = pirates.length - 1; i >= 0; i--) {
+            const p = pirates[i];
+
+            // Range checks
+            if (p.z > CONFIG.MAX_HIT_Z || p.z < CONFIG.MIN_HIT_Z) continue;
+
+            const dx = x - p.screenX;
+            // Approx Center Y (since screenY is Bottom/Feet)
+            // Sprite is roughly 400-500 unscaled height. Scaled height is ~400*scale.
+            // Center is screenY - 200*scale.
+            const spriteCenterY = p.screenY - (200 * p.scale);
+            const dy = y - spriteCenterY;
+
+            if (dx * dx + dy * dy < hitRadiusSq) {
+                // Hit!
+                pirates.splice(i, 1);
+                explosions.push(new Explosion(p.screenX, spriteCenterY));
+                p.destroy(); // Remove Pixi Sprite
+                hitCount++;
+                score++;
+            }
+        }
+
+        if (hitCount > 0 && soundManager) soundManager.playExplosion();
     }
 
-    // Background
-    // Sky
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#000022');
-    gradient.addColorStop(1, '#001133');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Update Score
+    const scoreDisplay = document.getElementById('score');
+    if (scoreDisplay) scoreDisplay.textContent = `pirates defeated: ${score}`;
+}
 
-    // Horizon Line
-    const centerY = canvas.height / 2;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(canvas.width, centerY);
-    ctx.strokeStyle = '#ffffff33';
-    ctx.stroke();
+// ------------------------------------------------------------------
+// MAIN LOOP
+// ------------------------------------------------------------------
 
-    // Pseudo-floor (grid)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 2;
-    // ... (grid lines optional, keeping clean for now)
-    ctx.restore();
+function gameLoop(delta) {
+    if (!resources.loaded) return;
 
-    // 1. Update & Spawning
+    // Process Inputs
+    processInputs();
+
+    // Spawning
     const now = performance.now();
     if (now - lastSpawnTime > CONFIG.SPAWN_RATE) {
         pirates.push(new Pirate());
@@ -513,59 +637,37 @@ function gameLoop() {
         if (CONFIG.SPAWN_RATE > 500) CONFIG.SPAWN_RATE -= 10;
     }
 
-    // Update all first (so Z is current)
+    // Update Pirates
     for (let p of pirates) {
         p.update();
     }
 
-    // 2. Sort logic: Painter's Algorithm
-    // Draw farthest items (High Z) FIRST. Draw nearest (Low Z) LAST.
-    // Sort Descending Z: [1000, 500, 100...]
-    pirates.sort((a, b) => b.z - a.z);
-
-    // 3. Draw (Forward: Index 0 is Farthest, draw it first)
-    for (let p of pirates) {
-        p.draw();
+    // FX
+    for (let i = explosions.length - 1; i >= 0; i--) {
+        const ex = explosions[i];
+        ex.update();
+        if (ex.particles.length === 0) explosions.splice(i, 1);
     }
 
-    // FX
-    [explosions, clickEffects].forEach(list => {
-        for (let i = list.length - 1; i >= 0; i--) {
-            list[i].update();
-            list[i].draw();
-            if (list[i].life <= 0) list.splice(i, 1);
-        }
-    });
+    for (let i = clickEffects.length - 1; i >= 0; i--) {
+        const ce = clickEffects[i];
+        ce.update();
+        if (ce.life <= 0) clickEffects.splice(i, 1);
+    }
+
+    // Background Gradient?
+    // Pixi background color handles the clear.
+    // Horizon line?
+    // We can add a Graphics object for that, but let's keep it simple for now.
 
     // Debug Stats
-    const delta = now - lastFrameTimeMs;
-    lastFrameTimeMs = now;
-    if (delta > 0) {
-        const cur = 1000 / delta;
-        debugFPS = debugFPS * 0.9 + cur * 0.1; // Smooth
-    }
-
-    ctx.save();
-    ctx.fillStyle = '#00ff00';
-    ctx.font = 'bold 12px monospace';
-    ctx.shadowColor = 'black'; // text outline
-    ctx.shadowBlur = 4;
-    ctx.fillText(`FPS: ${Math.round(debugFPS)}`, 10, 20);
-    ctx.fillText(`Entities: ${pirates.length}`, 10, 35);
-    ctx.restore();
-
-    requestAnimationFrame(gameLoop);
+    if (fpsText) fpsText.text = `FPS: ${Math.round(app.ticker.FPS)}`;
+    if (countText) countText.text = `Entities: ${pirates.length}`;
 }
 
-// Start Game
+// Init
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        initCanvas();
-        soundManager = new SoundManager();
-        requestAnimationFrame(gameLoop);
-    });
+    document.addEventListener('DOMContentLoaded', initPixi);
 } else {
-    initCanvas();
-    soundManager = new SoundManager();
-    requestAnimationFrame(gameLoop);
+    initPixi();
 }
