@@ -8,7 +8,7 @@ const CONFIG = {
         AOE_RING: 'rgba(255, 200, 50, 0.5)'
     },
     Z_START: 3000,     // Start further back
-    Z_SPEED: 8,        // Faster approach
+    Z_SPEED: 5,        // Slower approach (was 8)
     FOCAL_LENGTH: 400,
     MIN_SCALE: 0.1,
     FLOOR_Y: 400,      // World units below eye level (camera height)
@@ -129,6 +129,8 @@ let score = 0;
 let lastSpawnTime = 0;
 let soundManager;
 const inputQueue = [];
+let debugFPS = 60;
+let lastFrameTimeMs = 0;
 
 // UI Elements
 const scoreDisplay = document.getElementById('score');
@@ -189,31 +191,88 @@ class Pirate {
         this.animSpeed = 0.3 + Math.random() * 0.2; // Speed
         this.animDir = 1;
 
-        // Horizontal spread
-        this.worldX = (Math.random() - 0.5) * 3000;
+        // Horizontal Constraint Logic
+        const stopPerspective = Math.max(0.01, CONFIG.FOCAL_LENGTH + CONFIG.STOP_Z);
+        const stopScale = CONFIG.FOCAL_LENGTH / stopPerspective;
+
+        // Define Safe Screen Width
+        const margin = -150;
+        const safeWidthHalf = (canvas.width / 2) - margin;
+
+        // Back-calculate Max World X
+        const maxWorldX = safeWidthHalf / stopScale;
+
+        // Base World X (Center of path)
+        this.baseWorldX = (Math.random() - 0.5) * 2 * maxWorldX;
+        this.worldX = this.baseWorldX; // Current X
+
+        // Sticky Floor: World Y
         this.worldY = CONFIG.FLOOR_Y;
+
+        // Start far away
         this.z = CONFIG.Z_START;
-        this.speed = CONFIG.Z_SPEED * (0.9 + Math.random() * 0.4);
+
+        // Varied Speed: 0.5x to 1.5x of base speed
+        this.speed = CONFIG.Z_SPEED * (0.5 + Math.random() * 1.0);
+
         this.stopZ = CONFIG.STOP_Z + Math.random() * 50;
 
         this.screenX = 0;
         this.screenY = 0;
         this.scale = 0;
         this.radius = 0;
+
+        // Random Size Variation: +/- 10%
+        this.sizeMultiplier = 0.9 + Math.random() * 0.2;
+
+        // Wiggle / Wander Properties
+        this.wanderPhase = Math.random() * Math.PI * 2;
+        this.wanderSpeed = 0.02 + Math.random() * 0.03;
+        this.wanderAmp = 50 + Math.random() * 100; // Wander width
+
+        // Jump Properties
+        this.jumpY = 0; // Height off ground (positive up)
+        this.jumpVy = 0;
+        this.gravity = 0.8; // Gravity force
+        this.isJumping = false;
+        this.nextJumpTime = 60 + Math.random() * 200; // Frames until next jump
     }
 
     update() {
-        // 1. Position Update
+        // 1. Z-Position Update
         if (this.z > this.stopZ) {
             this.z -= this.speed;
         } else {
             this.z = this.stopZ;
         }
 
-        // 2. Animation Update (Ping-Pong)
+        // 2. X-Position Update (Wiggle)
+        // Move back and forth around base line
+        this.wanderPhase += this.wanderSpeed;
+        this.worldX = this.baseWorldX + Math.sin(this.wanderPhase) * this.wanderAmp;
+
+        // 3. Jump Logic
+        if (this.isJumping) {
+            this.jumpY += this.jumpVy; // Move up/down
+            this.jumpVy -= this.gravity; // Apply gravity
+
+            // Land on floor
+            if (this.jumpY <= 0) {
+                this.jumpY = 0;
+                this.isJumping = false;
+                this.nextJumpTime = 60 + Math.random() * 240; // Random cooldown
+            }
+        } else {
+            this.nextJumpTime--;
+            if (this.nextJumpTime <= 0) {
+                this.isJumping = true;
+                this.jumpVy = 15 + Math.random() * 10; // Jump strength
+            }
+        }
+
+        // 4. Animation Frame Update (Ping-Pong)
         if (this.frameCount > 0) {
             this.frameIndex += this.animSpeed * this.animDir;
-
             if (this.frameIndex >= this.frameCount - 1) {
                 this.frameIndex = this.frameCount - 1;
                 this.animDir = -1;
@@ -223,14 +282,19 @@ class Pirate {
             }
         }
 
+        // 5. Projection to Screen
         const perspective = Math.max(0.01, CONFIG.FOCAL_LENGTH + this.z);
-        this.scale = CONFIG.FOCAL_LENGTH / perspective;
+        this.scale = (CONFIG.FOCAL_LENGTH / perspective) * this.sizeMultiplier;
 
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
 
         this.screenX = centerX + this.worldX * this.scale;
-        this.screenY = centerY + this.worldY * this.scale;
+
+        // screenY = (FloorLevel - jumpHeight) * scale
+        // worldY is "distance down from horizon". Jumping effectively reduces this distance (moves closer to horizon/up).
+        const effectiveWorldY = this.worldY - this.jumpY;
+        this.screenY = centerY + effectiveWorldY * this.scale;
 
         // Size calculation
         const baseSize = 500;
@@ -472,6 +536,23 @@ function gameLoop() {
             if (list[i].life <= 0) list.splice(i, 1);
         }
     });
+
+    // Debug Stats
+    const delta = now - lastFrameTimeMs;
+    lastFrameTimeMs = now;
+    if (delta > 0) {
+        const cur = 1000 / delta;
+        debugFPS = debugFPS * 0.9 + cur * 0.1; // Smooth
+    }
+
+    ctx.save();
+    ctx.fillStyle = '#00ff00';
+    ctx.font = 'bold 12px monospace';
+    ctx.shadowColor = 'black'; // text outline
+    ctx.shadowBlur = 4;
+    ctx.fillText(`FPS: ${Math.round(debugFPS)}`, 10, 20);
+    ctx.fillText(`Entities: ${pirates.length}`, 10, 35);
+    ctx.restore();
 
     requestAnimationFrame(gameLoop);
 }
