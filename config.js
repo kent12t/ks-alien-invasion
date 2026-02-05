@@ -52,7 +52,7 @@ const CONFIG = {
     TOTAL_TIME: 100, // Seconds (extended for intro)
 
     WAVES: [
-        { start: 8, end: 23, count: 30, type: 'boss_wave', label: 'Wave 1' },
+        { start: 8, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
         { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
         { start: 43, end: 83, count: 30, type: 'boss_wave', label: 'Wave 3' }
     ],
