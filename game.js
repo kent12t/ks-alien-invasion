@@ -11,16 +11,24 @@ let explosions = [];
 let clickEffects = [];
 let score = 0;
 let lastSpawnTime = 0;
+let gameStartTime = 0;
+let gameTime = 0; // Second counter
+let currentWaveIndex = -1;
+let bossSpawned = false;
+let bossDefeated = false;
+let spaceship;
 let soundManager;
 const inputQueue = [];
 let debugFPS = 60;
 let lastFrameTimeMs = 0;
+let showDebug = false;
 
 // Asset Storage
 const resources = {
     // Arrays of PIXI.Texture
     captainFrames: [],
     minionFrames: [],
+    spaceshipFrames: [],
     parts: [],
     // Static Fallback Textures
     ship: null,
@@ -79,8 +87,12 @@ async function initPixi() {
     resources.loaded = true;
     uiContainer.removeChild(loadingText);
     setupDebugUI();
+    uiContainer.visible = false; // Debug hidden by default
 
-    // Game Loop via Pixi Ticker
+    // Init Game entities
+    gameStartTime = Date.now();
+    spaceship = new Spaceship();
+
     // Game Loop via Pixi Ticker
     app.ticker.add(gameLoop);
 
@@ -137,7 +149,8 @@ async function loadAssets() {
         // We run these in parallel-ish
         const p1 = loadSequence('CaptainPngSeq', 'captain', CONFIG.ANIMATION.FRAME_COUNT_CAPTAIN, resources.captainFrames);
         const p2 = loadSequence('MinionPngSeq', 'minion', CONFIG.ANIMATION.FRAME_COUNT_MINION, resources.minionFrames);
-        await Promise.all([p1, p2]);
+        const p3 = loadSequence('SpaceShip', 'JustSpaceship', CONFIG.ANIMATION.FRAME_COUNT_SPACESHIP, resources.spaceshipFrames);
+        await Promise.all([p1, p2, p3]);
     }
 
     // 3. Parts
@@ -240,15 +253,97 @@ function setupEventListeners() {
     window.addEventListener('resize', () => {
         // Pixi handles resizeTo: window automatically, but we might need to update center point logic if we cached it
     });
+
+    // Debug Toggle
+    window.addEventListener('keydown', (e) => {
+        if (e.key === '1') {
+            showDebug = !showDebug;
+            if (uiContainer) uiContainer.visible = showDebug;
+        }
+    });
 }
 
 // ------------------------------------------------------------------
 // PIXI ENTITIES
 // ------------------------------------------------------------------
 
-class Pirate {
+// Spaceship Entity (Cinematic)
+class Spaceship {
     constructor() {
-        this.type = Math.random() > 0.5 ? 'captain' : 'minion';
+        this.sprite = new PIXI.Sprite();
+        this.sprite.anchor.set(0.5);
+        this.sprite.zIndex = -500; // Far back, but in front of BG? Or top? 
+        // User said "flies in", usually spaceships are in the sky, so high Z or just high Y.
+        // Let's put it fairly high up on screen.
+
+        // Z-Index: Spaceship is at the back, lower than pirates.
+        // Pirates Z range: 3000 down to -2000.
+        // Pirate Z-Index = -z. Range: -3000 to +2000.
+        // To be behind everyone (farther away visually), it needs a lower Z-Index than the lowest pirate (-3000).
+        // So let's put it at -4000.
+        this.sprite.zIndex = -4000;
+
+        gameContainer.addChild(this.sprite);
+
+        this.frames = resources.spaceshipFrames;
+        this.frameCount = this.frames.length;
+        this.frameIndex = 0;
+        this.animSpeed = 0.5; // 30fps
+
+        // Position
+        this.y = 150; // Sky area
+        this.limitX = app.screen.width / 2;
+        this.startX = -300;
+        this.x = this.startX;
+        this.sprite.x = this.x;
+        this.sprite.y = this.y;
+        this.sprite.scale.set(0.8);
+
+        this.state = 'entering'; // entering, idle, leaving
+    }
+
+    update(dt) {
+        // Animation
+        this.frameIndex += this.animSpeed;
+        if (this.frameIndex >= this.frameCount) this.frameIndex = 0;
+        this.sprite.texture = this.frames[Math.floor(this.frameIndex)] || this.frames[0];
+
+        // Movement Logic
+        if (this.state === 'entering') {
+            // Move to center over 8 seconds?
+            // Speed = Distance / Time
+            // Distance approx (ScreenW/2 + 300)
+            const speed = (this.limitX - this.startX) / (8 * 60); // 8 sec * 60 ticks
+            this.x += speed;
+            if (this.x >= this.limitX) {
+                this.x = this.limitX;
+                this.state = 'idle';
+            }
+        } else if (this.state === 'leaving') {
+            this.x += 5; // Fast exit
+            // Tilt up?
+            this.sprite.rotation = -0.1;
+        } else {
+            // Hover
+            this.y = 150 + Math.sin(gameTime * 2) * 10;
+        }
+
+        this.sprite.x = this.x;
+        this.sprite.y = this.y;
+    }
+}
+
+class Pirate {
+    constructor(isBoss = false) {
+        // Enforce Minion Only for non-bosses
+        this.type = isBoss ? 'captain' : 'minion';
+        this.isBoss = isBoss;
+
+        // Stats
+        this.hp = isBoss ? CONFIG.BOSS.HP : 1;
+        this.maxHp = this.hp;
+
+        // Shadow Setup (Back Layer)
 
         // Shadow Setup (Back Layer)
         this.shadow = new PIXI.Graphics();
@@ -293,6 +388,8 @@ class Pirate {
         const maxWorldX = Math.max(0, safeWidthHalf / stopScale);
 
         this.baseWorldX = (Math.random() - 0.5) * 2 * maxWorldX;
+        if (this.isBoss) this.baseWorldX = 0; // Boss is centered
+
         this.worldX = this.baseWorldX; // Current X
 
         // Sticky Floor: World Y
@@ -301,23 +398,32 @@ class Pirate {
         // Start far away
         this.z = CONFIG.Z_START;
 
-        // Varied Speed: 0.5x to 1.5x of base speed
-        this.speed = CONFIG.Z_SPEED * (0.5 + Math.random() * 1.0);
+        // Varied Speed
+        if (this.isBoss) {
+            this.speed = CONFIG.Z_SPEED * 0.8;
+        } else {
+            this.speed = CONFIG.Z_SPEED * (0.5 + Math.random() * 1.0);
+        }
 
         this.stopZ = CONFIG.STOP_Z + Math.random() * 50;
+        if (this.isBoss) this.stopZ = CONFIG.STOP_Z; // Boss takes front and center
 
         this.screenX = 0;
         this.screenY = 0;
         this.scale = 0;
         this.radius = 0;
 
-        // Random Size Variation: +/- 10%
-        this.sizeMultiplier = 0.9 + Math.random() * 0.2;
+        // Size Variation
+        if (this.isBoss) {
+            this.sizeMultiplier = CONFIG.BOSS.SCALE;
+        } else {
+            this.sizeMultiplier = 0.9 + Math.random() * 0.2;
+        }
 
         // Wiggle / Wander Properties
         this.wanderPhase = Math.random() * Math.PI * 2;
         this.wanderSpeed = 0.02 + Math.random() * 0.03;
-        this.wanderAmp = 50 + Math.random() * 100; // Wander width
+        this.wanderAmp = 50 + Math.random() * 100;
 
         // Jump Properties
         this.jumpY = 0; // Height off ground (positive up)
@@ -443,6 +549,37 @@ class Pirate {
         }
     }
 
+    drawBossUI() {
+        if (!this.hpBar) {
+            this.hpBar = new PIXI.Graphics();
+            gameContainer.addChild(this.hpBar);
+        }
+
+        this.hpBar.clear();
+        this.hpBar.zIndex = 2000; // Force on top
+
+        const width = 100 * this.scale;
+        const height = 10 * this.scale;
+        const x = this.screenX - width / 2;
+        const y = this.screenY - (this.sprite.height * this.sprite.anchor.y) - (20 * this.scale);
+
+        // BG
+        this.hpBar.beginFill(0x000000);
+        this.hpBar.drawRect(x, y, width, height);
+        this.hpBar.endFill();
+
+        // FG
+        const pct = Math.max(0, this.hp / CONFIG.BOSS.HP);
+        const color = pct < 0.3 ? 0xFF0000 : 0x00FF00;
+        this.hpBar.beginFill(color);
+        this.hpBar.drawRect(x + 1, y + 1, (width - 2) * pct, height - 2);
+        this.hpBar.endFill();
+    }
+
+    takeDamage() {
+        this.hp--;
+    }
+
     getCurrentTexture() {
         if (this.frameCount > 0) {
             const idx = Math.floor(this.frameIndex);
@@ -456,6 +593,10 @@ class Pirate {
         this.sprite.destroy();
         shadowContainer.removeChild(this.shadow);
         this.shadow.destroy();
+        if (this.hpBar) {
+            gameContainer.removeChild(this.hpBar);
+            this.hpBar.destroy();
+        }
     }
 }
 
@@ -601,13 +742,54 @@ function processInputs() {
             const spriteCenterY = p.screenY - (200 * p.scale);
             const dy = y - spriteCenterY;
 
-            if (dx * dx + dy * dy < hitRadiusSq) {
+            // Scale Hitbox with Pirate (especially for Boss)
+            // Base radius is for minion at scale 1.0 (perspective)
+            // But scale varies wildly by dist.
+            // Let's rely on Screen Space size.
+            // AOE_RADIUS is 250 pixels. That's a huge click area.
+            // Wait, AOE_RADIUS is the EXPLOSION radius.
+            // The HIT radius should probably be tighter or relative to the sprite size.
+
+            // If we use AOE_RADIUS (250) as the click tolerance, that's massive.
+            // Maybe the user meant "AOE damage radius" vs "Click tolerance".
+            // Currently looks like click interaction uses AOE_RADIUS.
+
+            // Let's adjust it by scale so massive boss is easier to hit?
+            // Actually, if we use a fixed screen radius (250px), that's independent of sprite size.
+            // If the boss is huge, 250px might be barely his chest.
+            // If the boss is far away, 250px covers him and 5 friends.
+            // Let's scale it slightly by his sizeMultiplier if boss.
+
+            let hitRad = CONFIG.AOE_RADIUS;
+            if (p.isBoss) hitRad *= 1.5; // Bigger hitbox for boss
+
+            if (dx * dx + dy * dy < hitRad * hitRad) {
                 // Hit!
-                pirates.splice(i, 1);
-                explosions.push(new Explosion(p.screenX, spriteCenterY));
-                p.destroy(); // Remove Pixi Sprite
-                hitCount++;
-                score++;
+                let killed = false;
+                if (p.isBoss) {
+                    p.takeDamage();
+                    if (p.hp <= 0) {
+                        killed = true;
+                        bossDefeated = true;
+                        // Massive Boss Explosion
+                        for (let k = 0; k < 5; k++) {
+                            explosions.push(new Explosion(p.screenX + (Math.random() - 0.5) * 100, spriteCenterY + (Math.random() - 0.5) * 100));
+                        }
+                    } else {
+                        // Hit effect but not dead
+                        explosions.push(new Explosion(p.screenX, spriteCenterY));
+                    }
+                } else {
+                    killed = true;
+                }
+
+                if (killed) {
+                    pirates.splice(i, 1);
+                    explosions.push(new Explosion(p.screenX, spriteCenterY));
+                    p.destroy(); // Remove Pixi Sprite
+                    hitCount++;
+                    score++;
+                }
             }
         }
 
@@ -630,11 +812,57 @@ function gameLoop(delta) {
     processInputs();
 
     // Spawning
-    const now = performance.now();
-    if (now - lastSpawnTime > CONFIG.SPAWN_RATE) {
-        pirates.push(new Pirate());
-        lastSpawnTime = now;
-        if (CONFIG.SPAWN_RATE > 500) CONFIG.SPAWN_RATE -= 10;
+    // Director System
+    const now = Date.now();
+    gameTime = (now - gameStartTime) / 1000;
+
+    // Update Spaceship
+    if (spaceship) spaceship.update();
+
+    // Update Waves
+    if (gameTime <= CONFIG.TOTAL_TIME) {
+        // Find current wave
+        const wave = CONFIG.WAVES.find(w => gameTime >= w.start && gameTime < w.end);
+        if (wave) {
+            // Check if we need to spawn boss
+            if (wave.type === 'boss_wave' && !bossSpawned) {
+                bossSpawned = true;
+                pirates.push(new Pirate(true)); // Spawn Boss
+            }
+
+            // Minion Spawning
+            // Target count: wave.count.
+            // We want to reach this count over the duration? Or maintain it?
+            // "30 pirates, slower, 15s" implies 30 pirates appear during this 15s window.
+            // Rate = 15s / 30 = 0.5s per pirate.
+            const duration = wave.end - wave.start;
+            const rate = (duration / wave.count) * 1000; // ms
+
+            if (now - lastSpawnTime > rate) {
+                // Only spawn if we haven't exceeded some reasonable cap or if logic dictates
+                // "30 pirates" means total 30 spawned? Or 30 concurrent?
+                // Usually means "Spawn 30 over this period".
+                // Let's just spawn continuously at the rate.
+                if (wave.type !== 'boss_wave' || (wave.type === 'boss_wave' && Math.random() > 0.7)) {
+                    pirates.push(new Pirate(false));
+                }
+                lastSpawnTime = now;
+            }
+        }
+    } else {
+        // Game Over / Ending
+        // "at the end of a total 1min30s, the leftover pirates all die. and the spaceship gets scared and leaves away."
+        if (spaceship && spaceship.state !== 'leaving') spaceship.state = 'leaving';
+
+        // Kill all pirates
+        if (pirates.length > 0) {
+            for (let p of pirates) {
+                explosions.push(new Explosion(p.screenX, p.screenY - 100));
+                p.destroy();
+            }
+            pirates = [];
+            if (soundManager) soundManager.playExplosion();
+        }
     }
 
     // Update Pirates

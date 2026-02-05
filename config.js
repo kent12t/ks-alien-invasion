@@ -39,11 +39,27 @@ const CONFIG = {
     // Interaction Zones
     MAX_HIT_Z: 100,           // Beyond this distance, pirates cannot be hit
     MIN_HIT_Z: -2000,           // Behind this distance, pirates are ignored (behind camera)
-    STOP_Z: -150,               // The "Front Line" where pirates stop and congregate
+    STOP_Z: -180,               // The "Front Line" where pirates stop and congregate
 
     // Animation Assets
     ANIMATION: {
-        FRAME_COUNT_CAPTAIN: 121, // 0 to 120
-        FRAME_COUNT_MINION: 121,  // Number of frames in MinionPngSeq
+        FRAME_COUNT_CAPTAIN: 121,
+        FRAME_COUNT_MINION: 121,
+        FRAME_COUNT_SPACESHIP: 259
+    },
+
+    // Game Director / Timeline
+    TOTAL_TIME: 100, // Seconds (extended for intro)
+
+    WAVES: [
+        { start: 8, end: 23, count: 30, type: 'boss_wave', label: 'Wave 1' },
+        { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
+        { start: 43, end: 83, count: 30, type: 'boss_wave', label: 'Wave 3' }
+    ],
+
+    BOSS: {
+        HP: 20,
+        SCALE: 1.5,
+        HIT_BOUNCE: 1.2
     }
 };
