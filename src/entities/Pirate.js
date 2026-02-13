@@ -103,26 +103,26 @@ export class Pirate {
         this.nextJumpTime = 60 + Math.random() * 200; // Frames until next jump
     }
 
-    update() {
+    update(delta) {
         // z move
-        if (this.z > this.stopZ) this.z -= this.speed;
+        if (this.z > this.stopZ) this.z -= this.speed * delta;
         else this.z = this.stopZ;
 
         // x wander
-        this.wanderPhase += this.wanderSpeed;
+        this.wanderPhase += this.wanderSpeed * delta;
         this.worldX = this.baseWorldX + Math.sin(this.wanderPhase) * this.wanderAmp;
 
         // y jump
         if (this.isJumping) {
-            this.jumpY += this.jumpVy;
-            this.jumpVy -= this.gravity;
+            this.jumpY += this.jumpVy * delta;
+            this.jumpVy -= this.gravity * delta;
             if (this.jumpY <= 0) {
                 this.jumpY = 0;
                 this.isJumping = false;
                 this.nextJumpTime = 60 + Math.random() * 240;
             }
         } else {
-            this.nextJumpTime--;
+            this.nextJumpTime -= delta;
             if (this.nextJumpTime <= 0) {
                 this.isJumping = true;
                 this.jumpVy = 15 + Math.random() * 10;
@@ -131,7 +131,7 @@ export class Pirate {
 
         // Animation
         if (this.frameCount > 0) {
-            this.frameIndex += this.animSpeed * this.animDir;
+            this.frameIndex += this.animSpeed * this.animDir * delta;
             if (this.frameIndex >= this.frameCount - 1) {
                 this.frameIndex = this.frameCount - 1;
                 this.animDir = -1;

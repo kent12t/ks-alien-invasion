@@ -1,0 +1,290 @@
+<h1>Changes</h1>
+
+<h2>2023-06-08 1.4.3 BETA</h2>
+
+<ul>
+<li>Added the area type (include/exclude) to the text in the area list.</li>
+<li>Added a "From screen" button to the Windows Touch output that enables easy setup from a list of available screens.</li>
+<li>Clamp Windows Touch contact area to the dimensions of the screen.</li>
+<li>Fixed re-use of pointer ids when using multiple Windows Touch outputs simultaneously.</li>
+<li>Reset all pointer ids in the case touch injection fails.</li>
+</ul>
+
+<h2>2023-03-28 1.4.2</h2>
+
+<ul>
+<li>Prevent the sensor view dock window from being closed.</li>
+<li>Fix an issue with files with raw distance output being loaded.</li>
+</ul>
+
+<h2>2022-10-18 1.4.1</h2>
+
+<ul>
+<li>Properly handle touch detection and drawing of data from 360º laser scanners.</li>
+<li>Save and restore main window position.</li>
+<li>Added a minimum confidence setting for the LDROBOT LD06 laser. The LD06 devices tend to erroneously report close scan points when scanning certain materials like glass, increasing the minimum confidence can improve the situation.</li>
+<li>Update the view even when the sensor is not running.</li>
+</ul>
+
+<h2>2022-10-12 1.4.0</h2>
+
+<ul>
+<li>Hokuyo: Fixed a case where a connection failure would not cause automatic reconnection in the calibration utility.</li>
+<li>Touch detector: Make the initial finding of relevant touch segments use the area settings.</li>
+<li>Visualization: Show tracked but inactive touches, like when minimum touch age is not reached, in a light grey.</li>
+<li>LD06: Add support for LDROBOT LD06 sensors.</li>
+<li>Licensing: Add support for more relaxed online checks.</li>
+</ul>
+
+<h2>2021-10-21 1.3.1</h2>
+
+<ul>
+<li>Fix no touch detection when no include areas are defined.</li>
+</ul>
+
+<h2>2021-10-10 1.3.0</h2>
+
+<ul>
+<li>Fix crash in device / screen list when removing entries.</li>
+<li>Add support for include / exclude areas relative to a screen.</li>
+</ul>
+
+<h2>2021-08-08 1.2.5</h2>
+
+<ul>
+<li>Update to OSCpkt version 1.2.</li>
+<li>Fix various issues from code analysis.</li>
+<li>Fix performance regression in Windows Touch output introduced in version 1.2.4.</li>
+<li>Improve log window performance.</li>
+<li>Fix lag caused by buffer bloat using LeiShen LS01B devices.</li>
+<li>Updated Linux port based on Ubuntu 20.04.</li>
+<li>Fix minimum touch age not working.</li>
+</ul>
+
+<h2>2020-09-14 1.2.4</h2>
+
+<ul>
+<li>Update Yubico PIV Tool to version 1.6.2</li>
+<li>Improved dongle error logging.</li>
+<li>Fixed dongle expiration.</li>
+<li>Fix initialization of motion acceleration in TUIO output.</li>
+<li>Fix sending TUIO cursors with 0x0 position before minimum touch age is reached.</li>
+<li>Set the default minimum touch age to 0, except on Hokuyo devices where it remains 3. This reduces the time it takes to first detect a touch.</li>
+<li>Fix minimum touch age parameter not being used correctly.</li>
+<li>Remove fixed TUIO touch queue depth.</li>
+<li>Fix initialization of velocity / motion speed of the first TUIO packet of every touch.</li>
+<li>Add support for KELI LS sensors.</li>
+<li>Add support for a wider range of Sick sensors.</li>
+<li>Make reconnection of sensors more reliable.</li>
+<li>Dropped support for 32-bit Windows &amp; Linux platforms.</li>
+<li>The Sick driver now adjusts itself so that it can handle any incoming scan data format, regardless of the program settings.</li>
+<li>Added a reconfiguration mode "Always" and "Never" to the Sick sensors. For example you can set this to "Never" and configure the sensor using SOPAS-ET.</li>
+<li>Moved margin setting from the advanced device options to the screen settings. If you previously used a custom margin setting, you will have to set it again on the screen instead.</li>
+<li>Added elliptical screen types.</li>
+<li>Increased maximum TUIO cursor default from 10 to 100. This can be changed in the configuration file under config.tuio.cursor.max.</li>
+<li>Reduce time spent locking sensor outlines on screen update. The sensor outline should no longer be locked during OpenGL calls. This should fix connection stability when the render thread is unable to run, for example when other applications switch to fullscreen.</li>
+<li>Add support for LeiShen LS01B devices.</li>
+</ul>
+
+<h2>2019-01-26 1.2.3</h2>
+
+<ul>
+<li>Fix error causing Windows Touch input to fail with "The parameter is incorrect"</li>
+<li>Fix serial port settings not correctly restoring in the GUI</li>
+<li>Fix start angle calculation for Hokuyo sensors. This was a regression introduced in version 1.2.0 which caused certain models of Hokuyo sensors to be incorrectly rotated.</li>
+<li>Disabled bilateral filter by default. Filter causes problems in certain situations and there is not enough benefit to keep it enabled. This can be reenabled in the advanced settings.</li>
+<li>Replaced bitmap icons with vector icons. This makes the icons look better on high DPI systems or when the display is scaled up.</li>
+<li>Adjusted UI to make more buttons fit.</li>
+<li>Added new advanced settings window. This contains settings that usually do not need to be changed but can provide benefits in some situations.</li>
+<li>Added new translations to Arabic, French, Portugese, Spanish and Thai.</li>
+</ul>
+
+<h2>2018-09-19 1.2.2</h2>
+
+<ul>
+<li>Fixed LMS500 series missing scan configurations</li>
+<li>Added option to ignore unknown version messages from Sick devices (default)</li>
+<li>Check that the graphics card supports OpenGL 2.0</li>
+<li>Improved handling of invalid license files crashing the software on startup</li>
+<li>Fixed crash on loading older files without Windows Mouse mode setting</li>
+</ul>
+
+<h2>2018-06-12 1.2.1</h2>
+
+<ul>
+<li>Added optional new dongle licensing method</li>
+<li>Added optional test mode license, software will require intervention after 1 to 3 hours</li>
+<li>Added optional license expiry based on system date</li>
+<li>Fixed crashes on network read timeout and some other error cases on Sick and Leuze devices</li>
+<li>Add support for LeiShen N301 series devices</li>
+<li>Allow independent TUIO outputs for multiple devices</li>
+<li>Fixed bug where trying to stop a device during the reconnect interval would not stop it</li>
+<li>Added new dongle licensing system</li>
+</ul>
+
+<h2>2018-05-23 1.2.0</h2>
+
+<ul>
+<li>Added LIDAR OSC output method (experimental, must be activated in the license)</li>
+<li>Added support for Hokuyo lasers with > 180 degree range, defaults to 180 but can be changed in the config file</li>
+<li>Flush Hokuyo input buffers on reconnect to support more reliable connections when the laser is running already</li>
+<li>Fixed crash on Hokuyo laser timeouts</li>
+<li>Fixed shadow filter intialization on Hokuyo sensors</li>
+<li>Added linear regression, defaults to disabled</li>
+<li>Fixed minimum touch age in the debug settings not loading from file correctly</li>
+<li>Fixed crash with Leuze ROD4 sensors</li>
+<li>Fixed crash when stopping a device</li>
+<li>Updated all library dependencies to their newest versions</li>
+<li>Removed Windows XP support, if this is needed it can be readded, contact us</li>
+<li>Changed minimum Mac OS X version to 10.11 (El Capitan)</li>
+<li>Changed minimum Linux version to Ubuntu 16.04 Xenial Xerus or Debian 8 Jessie</li>
+<li>Improved OpenGL rendering performance</li>
+<li>Changed Windows mouse output to just "Mouse", which is available on all supported platforms</li>
+<li>Fixed startup warning about being unable to load "C" translation files</li>
+<li>Changed windows touch default pressure to 0, which means there is no pressure information</li>
+<li>Fixed minimum touch age not loading from file correctly</li>
+<li>Fixed using the server application with Windows display scaling enabled</li>
+</ul>
+
+<h2>2016-10-28 1.1.2</h2>
+
+<ul>
+<li>Fix default port of sensors</li>
+</ul>
+
+<h2>2016-10-28 1.1.1</h2>
+
+<ul>
+<li>Fix code generation problems in release build causing faulty SIMD code being generated.
+This should fix the new windows mouse mode.</li>
+</ul>
+
+<h2>2016-10-26 1.1.0</h2>
+
+<ul>
+<li>Disable invalid value interpolation by default</li>
+<li>Add configuration for bilateral filter and invalid value interpolation to debug window</li>
+<li>Add support for USB dongles</li>
+<li>Add support for Hokuyo sensors connected by USB</li>
+<li>Add support to automatically detect the specs of Hokuyo sensors</li>
+<li>Fix values below minimum distance (measurement errors) for Hokuyo sensors</li>
+<li>Change recording file format to record the sensors minimum and maximum distance, angular resolution,
+start angle and data point count</li>
+<li>Added two click windows mouse mode. In two click mode, the first touch point sets the position of
+the mouse cursor, and the second touch points presses a button. Depending on the side of the first
+point the second point is on, either the left or the right mouse button is pressed.</li>
+</ul>
+
+<h2>2016-05-13</h2>
+
+<ul>
+<li>Enable short options in server</li>
+<li>Add support to play replay files in server</li>
+<li>Fix Windows Mouse &amp; Touch with "Any screen" option</li>
+</ul>
+
+<h2>2016-03-12</h2>
+
+<ul>
+<li>Fix device screen association selection reset</li>
+<li>Prevent closing of render window</li>
+<li>Enable output screen selection</li>
+</ul>
+
+<h2>2016-03-02</h2>
+
+<ul>
+<li>Improve default filtering parameters</li>
+<li>Simplify kalman filter configuration</li>
+<li>Fixed pausing of log window</li>
+<li>Fixed log window icon</li>
+<li>Added more tooltips</li>
+<li>Enable n-to-1 filter on Sick LMS1xx</li>
+<li>Enable multi echo filter on Sick LMS5xx</li>
+<li>Improved touch detection</li>
+<li>Fixed small cursor prediction problems</li>
+<li>Add shadow filter for Hokuyo lasers</li>
+</ul>
+
+<h2>2015-12-21</h2>
+
+<ul>
+<li>Add support for Sick LMS50, LMS100 and LMS500 devices</li>
+<li>Fixed loading of device address and port</li>
+</ul>
+
+<h2>2015-12-11 #1</h2>
+
+<ul>
+<li>Show license features under Help|Show license</li>
+<li>Fix crash on exit with running device</li>
+<li>Add log window</li>
+</ul>
+
+<h2>2015-11-01 #1</h2>
+
+<ul>
+<li>Add support for Windows touch injection</li>
+<li>Mark outputs that are not working with a color and a warning message</li>
+</ul>
+
+<h2>2015-10-29 #1</h2>
+
+<ul>
+<li>Add beta support for Leuze RSL400 devices (beta license required)</li>
+<li>Automatically select newly created devices, screens and outputs for editing</li>
+<li>Add support for Windows mouse emulation</li>
+</ul>
+
+<h2>2015-10-02 #1</h2>
+
+<ul>
+<li>Add file selection dialog when no server configuration file is selected (only on Windows)</li>
+<li>Add language selection to the user interface</li>
+</ul>
+
+<h2>2015-10-01 #1</h2>
+
+<ul>
+<li>Fix server not processing touches</li>
+<li>Change touch detection merge algorithm to better handle close points</li>
+<li>Set default value for merge distance to 80mm</li>
+<li>Set default value for max. tracking distance to 400mm</li>
+<li>OpenGL updates do no longer block the user interface, which makes interaction while the sensor is running much more smooth</li>
+</ul>
+
+<h2>2015-09-30 #1</h2>
+
+<ul>
+<li>Add first version of Mac OS X build</li>
+<li>Fix localization problems on Linux</li>
+</ul>
+
+<h2>2015-09-26 #1</h2>
+
+<ul>
+<li>Add first version of Linux build</li>
+<li>Add first version of server component</li>
+<li>Improve license error reporting</li>
+<li>Properly handle UTF8 output on all supported platforms</li>
+<li>Change license file extension from .xml to .otlic</li>
+<li>Only install translation files in non english locales</li>
+<li>Improve file dialogs on Linux, always add file extensions</li>
+</ul>
+
+<h2>2015-09-19 #1</h2>
+
+<ul>
+<li>Improve deployment and localization</li>
+<li>Fix update rate calculation counting state changes as outline updates</li>
+<li>Fix stop state handling</li>
+<li>Remove unused code</li>
+<li>Make Linux build work again</li>
+<li>Add license features</li>
+</ul>
+
+<h2>2015-09-13 #1</h2>
+
+<ul>
+<li>Initial release</li>
+</ul>

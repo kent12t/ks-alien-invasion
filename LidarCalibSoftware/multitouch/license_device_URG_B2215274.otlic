@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<license>
+	<version>3</version>
+	<name>Eddy Yantos</name>
+	<company>Omnigram</company>
+	<creation_time>1689234190</creation_time>
+	<test_mode>false</test_mode>
+	<expires>false</expires>
+	<expiry_time>0</expiry_time>
+	<device>
+		<id>URG:B2215274</id>
+	</device>
+</license>
+<signature>3044022054A2A2ADDCFA9E568525D8F6168C5322487EDF40A45721D0473C3C6D4FDD18DA0220181DD307614FB3AE8A7AF2B872A7285BC43792989460ACAC8251EF021B31BD55</signature>

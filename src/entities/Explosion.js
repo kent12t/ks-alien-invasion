@@ -44,19 +44,19 @@ export class Explosion {
         }
     }
 
-    update() {
+    update(delta) {
         let active = 0;
         for (let p of this.particles) {
             const d = p.userData;
             if (d.dead) continue;
 
-            p.x += d.vx;
-            p.y += d.vy;
-            d.vy += 0.3; // Gravity
-            p.rotation += d.rotSpeed;
+            p.x += d.vx * delta;
+            p.y += d.vy * delta;
+            d.vy += 0.3 * delta; // Gravity
+            p.rotation += d.rotSpeed * delta;
 
-            p.scale.x -= 0.025;
-            p.scale.y -= 0.025;
+            p.scale.x -= 0.025 * delta;
+            p.scale.y -= 0.025 * delta;
 
             if (p.scale.x <= 0) {
                 p.scale.set(0);

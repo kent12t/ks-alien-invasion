@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<license>
+	<version>2</version>
+	<name>Eddy Yanto</name>
+	<company>Omnigram Pte. Ltd.</company>
+	<creation_time>1648737250</creation_time>
+	<test_mode>false</test_mode>
+	<expires>false</expires>
+	<expiry_time>0</expiry_time>
+	<device>
+		<id>URG:H1914549</id>
+	</device>
+</license>
+<signature>3045022100FE3663B4FC2DCB25A6176326179EF9ED9890CE30B4837C872E02E6080B4D138B0220257A30ED4522D02D4CF4F5E35BB9043D1D64A69656D7D20B195F9E98BE089616</signature>

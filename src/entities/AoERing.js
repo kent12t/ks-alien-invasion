@@ -13,9 +13,9 @@ export class AoERing {
         // Effect should be on top of pirates?
         this.g.zIndex = 2000; // Very high zIndex
     }
-    update() {
-        this.life -= 0.06;
-        this.radius += (this.maxRadius - this.radius) * 0.25;
+    update(delta) {
+        this.life -= 0.06 * delta;
+        this.radius += (this.maxRadius - this.radius) * (1 - Math.pow(0.75, delta));
 
         // Draw
         this.g.clear();

@@ -199,7 +199,7 @@ export class Game {
         // Pirates
         for (let i = this.pirates.length - 1; i >= 0; i--) {
             const p = this.pirates[i];
-            p.update();
+            p.update(delta);
             if (p.isBoss) p.drawBossUI();
 
             // Clean up off-screen
@@ -212,7 +212,7 @@ export class Game {
         // Explosions
         for (let i = this.explosions.length - 1; i >= 0; i--) {
             const e = this.explosions[i];
-            e.update();
+            e.update(delta);
             if (e.particles.length === 0) {
                 this.explosions.splice(i, 1);
             }
@@ -221,7 +221,7 @@ export class Game {
         // Click Effects
         for (let i = this.clickEffects.length - 1; i >= 0; i--) {
             const c = this.clickEffects[i];
-            c.update();
+            c.update(delta);
             if (c.life <= 0) {
                 this.clickEffects.splice(i, 1);
             }

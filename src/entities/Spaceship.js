@@ -51,13 +51,13 @@ export class Spaceship {
 
     update(dt) {
         // Animation
-        this.frameIndex += this.animSpeed;
+        this.frameIndex += this.animSpeed * dt;
         if (this.frameIndex >= this.frameCount) this.frameIndex = 0;
         this.sprite.texture = this.frames[Math.floor(this.frameIndex)] || this.frames[0];
 
         // Logic
         if (this.state === 'entering') {
-            this.entranceTimer++;
+            this.entranceTimer += dt;
             const t = Math.min(1, this.entranceTimer / this.entranceDuration);
             // Ease out cubic
             const ease = 1 - Math.pow(1 - t, 3);
@@ -100,7 +100,7 @@ export class Spaceship {
             }
         } else if (this.state === 'idle') {
             // Hover
-            this.tick = (this.tick || 0) + 1;
+            this.tick = (this.tick || 0) + dt;
             // Fade in the hover effect over first ~60 frames
             const fade = Math.min(1, this.tick / 60);
 
@@ -110,9 +110,9 @@ export class Spaceship {
         } else if (this.state === 'leaving') {
             // "It goes out from the right side, not the back."
             // Move World X positive.
-            this.worldX += 20; // Fast exit right
+            this.worldX += 20 * dt; // Fast exit right
             // Maybe slight curve up?
-            this.worldY -= 2;
+            this.worldY -= 2 * dt;
 
             // Banking for turn
             this.sprite.rotation = 0.2;
