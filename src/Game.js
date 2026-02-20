@@ -29,6 +29,13 @@ export class Game {
         this.bossSpawned = false;
         this.bossDefeated = false;
 
+        // Music
+        this.musicStarted = false;
+        this.musicFadingOut = false;
+
+        // Frame guard: skip first frame to avoid accumulated delta from WebGL context loss
+        this.firstFrame = true;
+
         // Debug
         this.debugFPS = 60;
         this.lastFrameTimeMs = 0;
@@ -120,7 +127,22 @@ export class Game {
         c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
         c.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            this.inputQueue.push({ x: e.clientX, y: e.clientY });
+            // Capture coordinates immediately before any other work
+            const x = e.clientX;
+            const y = e.clientY;
+
+            // Resume audio context synchronously (fire-and-forget) on every click
+            if (this.soundManager) {
+                this.soundManager.resumeAudioContext();
+
+                // Start background music on first click (must be in user gesture)
+                if (!this.musicStarted && resources.music) {
+                    this.musicStarted = true;
+                    this.soundManager.playBackgroundMusic(resources.music, 65);
+                }
+            }
+
+            this.inputQueue.push({ x, y });
         }, { capture: true });
         c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
         c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
@@ -162,6 +184,15 @@ export class Game {
     }
 
     gameLoop(delta) {
+        // First frame guard: force normal delta to prevent fast-forward from WebGL context loss
+        if (this.firstFrame) {
+            this.firstFrame = false;
+            delta = 1.0;
+        }
+
+        // Clamp delta to prevent spikes during frame drops
+        delta = Math.min(delta, 3.0);
+        
         const now = Date.now();
         this.gameTime = (now - this.gameStartTime) / 1000;
 
@@ -191,6 +222,12 @@ export class Game {
 
             // Ship leaves
             this.spaceship.state = 'leaving';
+
+            // Fade out music when ship leaves
+            if (this.soundManager && !this.musicFadingOut) {
+                this.musicFadingOut = true;
+                this.soundManager.fadeOutMusic(3.0); // 3 second fade out
+            }
         }
 
         // Update Entities
