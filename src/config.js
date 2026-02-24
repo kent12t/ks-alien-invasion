@@ -49,12 +49,22 @@ export const CONFIG = {
     },
 
     // Game Director / Timeline
-    TOTAL_TIME: 100, // Seconds (extended for intro)
+    TIMELINE: {
+        GAME_LENGTH: 90,             // Total active game time
+        SPACESHIP_AUDIO_START: 0,
+        SPACESHIP_VISUAL_START: 0.5,
+        ALIEN_SPAWN_START: 4,
+        ALIEN_SPAWN_END: 80,
+        ALIEN_KILL_TRIGGER: 85,
+        SPACESHIP_EXIT_AUDIO_START: 86,
+        SPACESHIP_EXIT_VISUAL_START: 87,
+        GAME_END: 90
+    },
 
     WAVES: [
-        { start: 8, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
+        { start: 4, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
         { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
-        { start: 43, end: 83, count: 30, type: 'boss_wave', label: 'Wave 3' }
+        { start: 43, end: 80, count: 30, type: 'boss_wave', label: 'Wave 3' }
     ],
 
     BOSS: {

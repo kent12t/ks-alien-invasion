@@ -13,10 +13,11 @@ export class Explosion {
 
         const partCount = 8 + Math.floor(Math.random() * 6);
         for (let i = 0; i < partCount; i++) {
-            // Random texture
+            // Random texture – ensure it is a valid texture with baseTexture
             let tex = null;
             if (resources.parts.length > 0) {
-                tex = resources.parts[Math.floor(Math.random() * resources.parts.length)];
+                const candidate = resources.parts[Math.floor(Math.random() * resources.parts.length)];
+                if (candidate && candidate.baseTexture) tex = candidate;
             }
             if (tex) {
                 const s = new PIXI.Sprite(tex);

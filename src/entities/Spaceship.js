@@ -53,7 +53,16 @@ export class Spaceship {
         // Animation
         this.frameIndex += this.animSpeed * dt;
         if (this.frameIndex >= this.frameCount) this.frameIndex = 0;
-        this.sprite.texture = this.frames[Math.floor(this.frameIndex)] || this.frames[0];
+        // Ensure we have a valid texture before assigning to avoid null baseTexture errors
+        const nextTexture = this.frames[Math.floor(this.frameIndex)];
+        if (nextTexture && nextTexture.baseTexture) {
+            this.sprite.texture = nextTexture;
+        } else if (this.frames[0] && this.frames[0].baseTexture) {
+            this.sprite.texture = this.frames[0];
+        } else {
+            // Fallback: keep existing texture or assign a placeholder if needed
+            console.warn('Spaceship: No valid texture available for frame', this.frameIndex);
+        }
 
         // Logic
         if (this.state === 'entering') {
@@ -97,6 +106,8 @@ export class Spaceship {
                 // We want sin(tick * 0.05) to start near 0 (since worldY resets to -300).
                 // So tick should be 0 (phase 0) or PI (phase 0).
                 this.tick = 0;
+                // Reset frame index to start animation fresh after restart
+                this.frameIndex = 0;
             }
         } else if (this.state === 'idle') {
             // Hover

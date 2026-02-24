@@ -19,6 +19,10 @@ export default class SoundManager {
         this.masterGain = null;
         this.sfxGain = null;
         this.footstepGain = null; // Dedicated bus for footsteps
+        // We'll also keep a reference to the footstep source for possible stop
+        this.footstepSource = null;
+        // Flag to mute all alien related sounds (death, grunts, footsteps)
+        this.alienMuted = false;
         this.explosionNoiseBuffer = null;
         this.audioBuffers = {}; // Map of preloaded audio buffers
 
@@ -105,10 +109,14 @@ export default class SoundManager {
 
     // --- Alien Specific Audio Logic ---
     playAlienDeath(panX = 0) {
+        // Skip if alien sounds are muted
+        if (this.alienMuted) return;
         this.playAsset('alien_death', { pan: panX, volume: 0.8 });
     }
 
     playAlienGrunt(panX = 0) {
+        // Skip if alien sounds are muted
+        if (this.alienMuted) return;
         const grunts = ['RAAAW', 'VRAAAGH', 'YA-AA', 'ckckck', 'long_gurgles'];
         const randomGrunt = grunts[Math.floor(Math.random() * grunts.length)];
         this.playAsset(randomGrunt, { pan: panX, volume: 0.6 });
@@ -337,6 +345,22 @@ export default class SoundManager {
         }
         if (this.footstepSource) {
             this.footstepSource.stop();
+            this.footstepSource = null;
+        }
+    }
+
+    // ----- Alien Audio Control -----
+    muteAlienSounds() {
+        if (!this.audioContext) return;
+        // Set mute flag
+        this.alienMuted = true;
+        // Mute footstep gain immediately
+        if (this.footstepGain) {
+            this.footstepGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+        }
+        // Stop footstep source if running
+        if (this.footstepSource) {
+            try { this.footstepSource.stop(); } catch (e) { /* ignore */ }
             this.footstepSource = null;
         }
     }

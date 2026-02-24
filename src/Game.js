@@ -21,13 +21,18 @@ export class Game {
         this.clickEffects = [];
         this.inputQueue = [];
 
+        this.gameState = 'IDLE';
         this.score = 0;
         this.lastSpawnTime = 0;
         this.gameStartTime = 0;
-        this.gameTime = 0; // Second counter
+        this.gameTime = -1; // Second counter
         this.currentWaveIndex = -1;
         this.bossSpawned = false;
         this.bossDefeated = false;
+
+        this.spaceshipAudioExiting = false;
+        this.spaceshipLeavingTriggered = false;
+        this.alienKillTriggered = false;
 
         // Music
         this.musicStarted = false;
@@ -111,14 +116,7 @@ export class Game {
         this.uiContainer.visible = false;
 
         // Init Game entities
-        // Delay the visual game state and timeline by 0.5s so audio precedes the visuals
-        this.gameStartTime = Date.now() + 1000;
-        this.spaceship = new Spaceship(this.app, this.gameContainer);
-
-        // Play spaceship entrance audio immediately as the game visually starts
-        if (this.soundManager) {
-            this.soundManager.playSpaceship();
-        }
+        this.gameState = 'IDLE';
 
         // Init BG
         if (resources.floor) {
@@ -130,6 +128,69 @@ export class Game {
 
         // Game Loop
         this.app.ticker.add((delta) => this.gameLoop(delta));
+    }
+
+    startGame() {
+        this.gameState = 'ACTIVE';
+        this.gameStartTime = Date.now();
+        this.gameTime = 0;
+
+        this.bossSpawned = false;
+        this.bossDefeated = false;
+        this.currentWaveIndex = -1;
+        this.spaceshipLeavingTriggered = false;
+        this.spaceshipAudioExiting = false;
+        this.alienKillTriggered = false;
+        this.score = 0;
+
+        // Clean up any remaining entities cleanly
+        while (this.shadowContainer.children.length > 0) {
+            this.shadowContainer.removeChildAt(0).destroy(true);
+        }
+        while (this.gameContainer.children.length > 0) {
+            this.gameContainer.removeChildAt(0).destroy(true);
+        }
+
+        this.spaceship = null;
+        this.pirates = [];
+        this.explosions = [];
+        this.clickEffects = [];
+        this.inputQueue = [];
+
+        // Restart audio
+        if (this.soundManager) {
+            this.soundManager.stopMusic();
+            this.musicStarted = true;
+            this.musicFadingOut = false;
+            if (resources.music) {
+                this.soundManager.playBackgroundMusic(resources.music, 0);
+            }
+            this.soundManager.startFootsteps();
+
+            // Spaceship audio starts at 0s:
+            this.soundManager.playSpaceship();
+        }
+    }
+
+    returnToIdle() {
+        this.gameState = 'IDLE';
+
+        while (this.shadowContainer.children.length > 0) {
+            this.shadowContainer.removeChildAt(0).destroy(true);
+        }
+        while (this.gameContainer.children.length > 0) {
+            this.gameContainer.removeChildAt(0).destroy(true);
+        }
+
+        this.spaceship = null;
+        this.pirates = [];
+        this.explosions = [];
+        this.clickEffects = [];
+        this.inputQueue = [];
+
+        if (this.soundManager) {
+            this.soundManager.stopMusic();
+        }
     }
 
     resizeBackground() {
@@ -156,13 +217,11 @@ export class Game {
             // Resume audio context synchronously (fire-and-forget) on every click
             if (this.soundManager) {
                 this.soundManager.resumeAudioContext();
+            }
 
-                // Start background music, footsteps, and spaceship intro on first click (must be in user gesture)
-                if (!this.musicStarted && resources.music) {
-                    this.musicStarted = true;
-                    this.soundManager.playBackgroundMusic(resources.music, 0);
-                    this.soundManager.startFootsteps();
-                }
+            if (this.gameState === 'IDLE') {
+                this.startGame();
+                return;
             }
 
             this.inputQueue.push({ x, y });
@@ -217,8 +276,6 @@ export class Game {
         delta = Math.min(delta, 3.0);
 
         const now = Date.now();
-        this.gameTime = (now - this.gameStartTime) / 1000;
-
         if (this.lastFrameTimeMs) {
             this.debugFPS = 1000 / (now - this.lastFrameTimeMs);
         }
@@ -229,57 +286,69 @@ export class Game {
             this.countText.text = `Entities: ${this.pirates.length + this.explosions.length}`;
         }
 
-        // Logic
-        this.spawnLogic(now);
-        this.processInputs();
-
-        // Ship leaving sequence (starts 3s before end)
-        if (this.gameTime >= 87 && !this.spaceshipLeavingTriggered) {
-            this.spaceshipLeavingTriggered = true;
-            if (this.soundManager) {
-                this.soundManager.playSpaceshipLeaving();
-            }
+        if (this.gameState === 'IDLE') {
+            return;
         }
 
-        // END GAME SEQUENCE (90s = 1m 30s)
-        if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
+        this.gameTime = (now - this.gameStartTime) / 1000;
+
+        // Visual start (0.5s)
+        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_VISUAL_START && !this.spaceship) {
+            this.spaceship = new Spaceship(this.app, this.gameContainer);
+        }
+
+        // Kill trigger (85s)
+        if (this.gameTime >= CONFIG.TIMELINE.ALIEN_KILL_TRIGGER && !this.alienKillTriggered) {
+            this.alienKillTriggered = true;
             const livingPirates = this.pirates.length;
 
-            // Kill all existing minions/boss
             for (let i = this.pirates.length - 1; i >= 0; i--) {
                 const p = this.pirates[i];
                 this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
                 p.destroy();
             }
-            this.pirates = []; // Clear array
+            this.pirates = [];
 
-            // Ship leaves visually
-            this.spaceship.state = 'leaving';
-
-            // Fade out music when ship leaves
-            if (this.soundManager && !this.musicFadingOut) {
-                this.musicFadingOut = true;
-                this.soundManager.fadeOutMusic(3.0); // 3 second fade out
-
-                // Final death noises ONLY if aliens were actually killed right now
+            if (this.soundManager) {
                 if (livingPirates > 0) {
                     this.soundManager.playExplosion();
-                    this.soundManager.playAlienDeath(0); // Center pan for the final wipe
+                    this.soundManager.playAlienDeath(0);
                 }
-
-                // Immediately cut footsteps since they all died simultaneously
-                if (this.soundManager.footstepGain) {
-                    this.soundManager.footstepGain.gain.cancelScheduledValues(this.soundManager.audioContext.currentTime);
-                    this.soundManager.footstepGain.gain.setValueAtTime(0, this.soundManager.audioContext.currentTime);
-                }
+                // Fully mute all alien related sounds (footsteps, grunts, death, etc.)
+                this.soundManager.muteAlienSounds();
             }
         }
 
-        // Update Entities
-        if (this.gameTime < 0) {
-            this.spaceship.sprite.visible = false;
-        } else {
-            this.spaceship.sprite.visible = true;
+        // Spaceship exit audio (86s)
+        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_EXIT_AUDIO_START && !this.spaceshipAudioExiting) {
+            this.spaceshipAudioExiting = true;
+            if (this.soundManager) {
+                this.soundManager.playSpaceshipLeaving();
+            }
+        }
+
+        // Spaceship exit visual (87s)
+        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_EXIT_VISUAL_START && this.spaceship && !this.spaceshipLeavingTriggered) {
+            this.spaceshipLeavingTriggered = true;
+            this.spaceship.state = 'leaving';
+
+            if (this.soundManager && !this.musicFadingOut) {
+                this.musicFadingOut = true;
+                this.soundManager.fadeOutMusic(3.0);
+            }
+        }
+
+        // END GAME (90s)
+        if (this.gameTime >= CONFIG.TIMELINE.GAME_END) {
+            this.returnToIdle();
+            return;
+        }
+
+        // Logic
+        this.spawnLogic(now);
+        this.processInputs();
+
+        if (this.spaceship) {
             this.spaceship.update(delta);
         }
 
@@ -364,22 +433,9 @@ export class Game {
             // Simple timer based spawn
             if (now - this.lastSpawnTime > CONFIG.SPAWN_RATE) {
                 this.lastSpawnTime = now;
-                // Don't spawn if only boss and boss is alive? 
-                // Original code was simpler, let's just stick to:
-
-                // If boss wave, maybe spawn minions too?
-                // Let's spawn minion if it's NOT just the boss instant.
-
                 const p = new Pirate(this.app, this.gameContainer, this.shadowContainer, false);
                 this.pirates.push(p);
             }
-        }
-
-        // END GAME SEQUENCE (90s = 1m 30s)
-        if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
-            // Handled in game loop now to manage the audio and fade out correctly
-            // Keeping the return so logic stops spawning.
-            return;
         }
     }
 

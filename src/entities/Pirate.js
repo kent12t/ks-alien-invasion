@@ -173,13 +173,22 @@ export class Pirate {
 
         // Normalize sprite texture size
         const tex = this.getCurrentTexture();
-        if (tex) {
+        if (tex && tex.baseTexture) {
             this.sprite.texture = tex;
             const w = tex.width || 1000;
             const h = tex.height || 1000;
             const norm = 500 / Math.max(w, h);
             this.sprite.scale.set(this.scale * norm);
+        } else if (this.fallback && this.fallback.baseTexture) {
+            // Use fallback texture if valid
+            this.sprite.texture = this.fallback;
+            const w = this.fallback.width || 1000;
+            const h = this.fallback.height || 1000;
+            const norm = 500 / Math.max(w, h);
+            this.sprite.scale.set(this.scale * norm);
         } else {
+            // No valid texture – keep previous texture and log warning
+            console.warn('Pirate: No valid texture available for rendering');
             this.sprite.scale.set(this.scale * 0.5);
         }
 
@@ -253,9 +262,12 @@ export class Pirate {
     getCurrentTexture() {
         if (this.frameCount > 0) {
             const idx = Math.floor(this.frameIndex);
-            if (this.frames[idx]) return this.frames[idx];
+            const tex = this.frames[idx];
+            if (tex && tex.baseTexture) return tex;
         }
-        return this.fallback;
+        // Return fallback only if it is a valid texture
+        if (this.fallback && this.fallback.baseTexture) return this.fallback;
+        return null;
     }
 
     destroy() {
