@@ -89,14 +89,36 @@ export class Game {
         // Load Assets
         await loadAssets();
 
+        // Preload Audio Assets
+        const audioAssets = [
+            'assets/audio/RAAAW.aac',
+            'assets/audio/VRAAAGH.aac',
+            'assets/audio/YA-AA.aac',
+            'assets/audio/alien_death.aac',
+            'assets/audio/ckckck.aac',
+            'assets/audio/long_gurgles.aac',
+            'assets/audio/steps_v1.wav',
+            'assets/audio/laser.aac',
+            'assets/audio/spaceship.wav'
+        ];
+        if (this.soundManager) {
+            await this.soundManager.preloadAudio(audioAssets);
+        }
+
         // Start Game
         this.uiContainer.removeChild(loadingText);
         this.setupDebugUI();
         this.uiContainer.visible = false;
 
         // Init Game entities
-        this.gameStartTime = Date.now();
+        // Delay the visual game state and timeline by 0.5s so audio precedes the visuals
+        this.gameStartTime = Date.now() + 1000;
         this.spaceship = new Spaceship(this.app, this.gameContainer);
+
+        // Play spaceship entrance audio immediately as the game visually starts
+        if (this.soundManager) {
+            this.soundManager.playSpaceship();
+        }
 
         // Init BG
         if (resources.floor) {
@@ -135,10 +157,11 @@ export class Game {
             if (this.soundManager) {
                 this.soundManager.resumeAudioContext();
 
-                // Start background music on first click (must be in user gesture)
+                // Start background music, footsteps, and spaceship intro on first click (must be in user gesture)
                 if (!this.musicStarted && resources.music) {
                     this.musicStarted = true;
-                    this.soundManager.playBackgroundMusic(resources.music, 65);
+                    this.soundManager.playBackgroundMusic(resources.music, 0);
+                    this.soundManager.startFootsteps();
                 }
             }
 
@@ -192,7 +215,7 @@ export class Game {
 
         // Clamp delta to prevent spikes during frame drops
         delta = Math.min(delta, 3.0);
-        
+
         const now = Date.now();
         this.gameTime = (now - this.gameStartTime) / 1000;
 
@@ -210,8 +233,18 @@ export class Game {
         this.spawnLogic(now);
         this.processInputs();
 
+        // Ship leaving sequence (starts 3s before end)
+        if (this.gameTime >= 87 && !this.spaceshipLeavingTriggered) {
+            this.spaceshipLeavingTriggered = true;
+            if (this.soundManager) {
+                this.soundManager.playSpaceshipLeaving();
+            }
+        }
+
         // END GAME SEQUENCE (90s = 1m 30s)
         if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
+            const livingPirates = this.pirates.length;
+
             // Kill all existing minions/boss
             for (let i = this.pirates.length - 1; i >= 0; i--) {
                 const p = this.pirates[i];
@@ -220,18 +253,35 @@ export class Game {
             }
             this.pirates = []; // Clear array
 
-            // Ship leaves
+            // Ship leaves visually
             this.spaceship.state = 'leaving';
 
             // Fade out music when ship leaves
             if (this.soundManager && !this.musicFadingOut) {
                 this.musicFadingOut = true;
                 this.soundManager.fadeOutMusic(3.0); // 3 second fade out
+
+                // Final death noises ONLY if aliens were actually killed right now
+                if (livingPirates > 0) {
+                    this.soundManager.playExplosion();
+                    this.soundManager.playAlienDeath(0); // Center pan for the final wipe
+                }
+
+                // Immediately cut footsteps since they all died simultaneously
+                if (this.soundManager.footstepGain) {
+                    this.soundManager.footstepGain.gain.cancelScheduledValues(this.soundManager.audioContext.currentTime);
+                    this.soundManager.footstepGain.gain.setValueAtTime(0, this.soundManager.audioContext.currentTime);
+                }
             }
         }
 
         // Update Entities
-        this.spaceship.update(delta); // Or pass gameTime?
+        if (this.gameTime < 0) {
+            this.spaceship.sprite.visible = false;
+        } else {
+            this.spaceship.sprite.visible = true;
+            this.spaceship.update(delta);
+        }
 
         // Pirates
         for (let i = this.pirates.length - 1; i >= 0; i--) {
@@ -252,6 +302,22 @@ export class Game {
             e.update(delta);
             if (e.particles.length === 0) {
                 this.explosions.splice(i, 1);
+            }
+        }
+
+        // Alien Audio Ambiance & Footsteps
+        if (this.soundManager) {
+            // Update footstep intensity based on current numbers
+            this.soundManager.updateFootstepVolume(this.pirates.length, CONFIG.AUDIO.MAX_FOOTSTEP_ALIENS, CONFIG.AUDIO.MAX_FOOTSTEP_VOLUME);
+
+            // Randomly play grunts based on how many are on screen
+            if (this.pirates.length > 0 && Math.random() < (this.pirates.length * CONFIG.AUDIO.GRUNT_CHANCE_PER_ALIEN)) {
+                // Pick a random alien on screen to act as the "source" for panning
+                const p = this.pirates[Math.floor(Math.random() * this.pirates.length)];
+
+                // Calculate simple stereo pan based on screen position (-1 to 1)
+                const panX = (p.screenX / this.app.screen.width) * 2 - 1;
+                this.soundManager.playAlienGrunt(panX);
             }
         }
 
@@ -311,16 +377,9 @@ export class Game {
 
         // END GAME SEQUENCE (90s = 1m 30s)
         if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
-            // Kill all existing minions/boss
-            for (let i = this.pirates.length - 1; i >= 0; i--) {
-                const p = this.pirates[i];
-                this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
-                p.destroy();
-            }
-            this.pirates = []; // Clear array
-
-            // Ship leaves
-            this.spaceship.state = 'leaving';
+            // Handled in game loop now to manage the audio and fade out correctly
+            // Keeping the return so logic stops spawning.
+            return;
         }
     }
 
@@ -392,7 +451,10 @@ export class Game {
                 }
             }
 
-            if (hitCount > 0 && this.soundManager) this.soundManager.playExplosion();
+            if (hitCount > 0 && this.soundManager) {
+                this.soundManager.playExplosion();
+                this.soundManager.playAlienDeath((x / this.app.screen.width) * 2 - 1); // Pan based on click
+            }
         }
     }
 }

@@ -61,5 +61,12 @@ export const CONFIG = {
         HP: 20,
         SCALE: 1.8,
         HIT_BOUNCE: 1.2
+    },
+
+    // Audio & Ambiance
+    AUDIO: {
+        MAX_FOOTSTEP_ALIENS: 30,       // Alien count at which footsteps reach max volume
+        MAX_FOOTSTEP_VOLUME: 4.0,      // The max volume of the footprint footsteps
+        GRUNT_CHANCE_PER_ALIEN: 0.0003 // Per-frame chance an alien will scream/grunt (adjust based on FPS)
     }
 };

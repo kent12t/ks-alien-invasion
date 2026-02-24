@@ -48,7 +48,7 @@ export async function loadAssets() {
     }
 
     // 4. Music
-    resources.music = new Audio('assets/Music/Damon Power - A Thousand Suns.mp3');
+    resources.music = new Audio('assets/audio/bgm_edited90s.wav');
     resources.music.loop = false;
     resources.music.preload = 'metadata'; // Preload metadata so we can set currentTime
 

@@ -8,6 +8,161 @@ export default class SoundManager {
         }
         this.backgroundMusic = null;
         this.musicFading = false;
+
+        // --- Volume Mixing Configuration ---
+        this.volumes = {
+            master: 1.0,
+            music: 0.2,
+            sfx: 0.8
+        };
+
+        this.masterGain = null;
+        this.sfxGain = null;
+        this.footstepGain = null; // Dedicated bus for footsteps
+        this.explosionNoiseBuffer = null;
+        this.audioBuffers = {}; // Map of preloaded audio buffers
+
+        if (this.audioContext) {
+            // Setup master and sfx busses
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.gain.value = this.volumes.master;
+            this.masterGain.connect(this.audioContext.destination);
+
+            this.sfxGain = this.audioContext.createGain();
+            this.sfxGain.gain.value = this.volumes.sfx;
+            this.sfxGain.connect(this.masterGain);
+
+            this.footstepGain = this.audioContext.createGain();
+            this.footstepGain.gain.value = 0; // Starts silent
+            this.footstepGain.connect(this.sfxGain);
+
+            // Pre-generate noise buffer for explosions to save CPU
+            this.explosionNoiseBuffer = this.createNoiseBuffer(0.7); // max duration
+
+            // Background loops
+            this.footstepSource = null;
+        }
+    }
+
+    // Generate noise buffer once
+    createNoiseBuffer(duration) {
+        if (!this.audioContext) return null;
+        const bufferSize = Math.floor(this.audioContext.sampleRate * duration);
+        const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-4 * i / bufferSize);
+        }
+        return buffer;
+    }
+
+    // --- Media Asset Preloading ---
+    async preloadAudio(fileUrls) {
+        if (!this.audioContext) return;
+        const promises = fileUrls.map(async (url) => {
+            try {
+                const res = await fetch(url);
+                const arrayBuffer = await res.arrayBuffer();
+                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                // Extract filename without extension (e.g., 'alien_death.aac' -> 'alien_death')
+                const name = url.split('/').pop().split('.')[0];
+                this.audioBuffers[name] = audioBuffer;
+            } catch (err) {
+                console.warn(`Failed to preload audio: ${url}`, err);
+            }
+        });
+        await Promise.all(promises);
+    }
+
+    // Play a preloaded sound asset
+    playAsset(name, options = {}) {
+        if (!this.audioContext || !this.audioBuffers[name]) return;
+        const source = this.audioContext.createBufferSource();
+        source.buffer = this.audioBuffers[name];
+
+        let lastNode = source;
+
+        // Apply Panning if requested
+        if (options.pan !== undefined && this.audioContext.createStereoPanner) {
+            const panner = this.audioContext.createStereoPanner();
+            panner.pan.value = Math.max(-1, Math.min(1, options.pan)); // clamp -1 to 1
+            lastNode.connect(panner);
+            lastNode = panner;
+        }
+
+        // Apply specific gain if requested
+        if (options.volume !== undefined) {
+            const gain = this.audioContext.createGain();
+            gain.gain.value = options.volume;
+            lastNode.connect(gain);
+            lastNode = gain;
+        }
+
+        lastNode.connect(this.sfxGain);
+        source.start(0);
+        return source;
+    }
+
+    // --- Alien Specific Audio Logic ---
+    playAlienDeath(panX = 0) {
+        this.playAsset('alien_death', { pan: panX, volume: 0.8 });
+    }
+
+    playAlienGrunt(panX = 0) {
+        const grunts = ['RAAAW', 'VRAAAGH', 'YA-AA', 'ckckck', 'long_gurgles'];
+        const randomGrunt = grunts[Math.floor(Math.random() * grunts.length)];
+        this.playAsset(randomGrunt, { pan: panX, volume: 0.6 });
+    }
+
+    // Footstep Loop Management
+    startFootsteps() {
+        if (!this.audioContext || !this.audioBuffers['steps_v1']) return;
+        if (this.footstepSource) return; // Already going
+
+        this.footstepSource = this.audioContext.createBufferSource();
+        this.footstepSource.buffer = this.audioBuffers['steps_v1'];
+        this.footstepSource.loop = true;
+        this.footstepSource.connect(this.footstepGain);
+        this.footstepSource.start(0);
+    }
+
+    updateFootstepVolume(alienCount, maxAliens = 50, maxVolume = 4) {
+        if (!this.footstepGain || !this.audioContext) return;
+
+        let targetVolume = 0;
+        if (alienCount > 0) {
+            // Give footsteps a much louder baseline so even 1 alien is clearly audible
+            const baseVolumeRatio = 0.25; // Minimum 25% of maxVolume if >= 1 alien
+
+            // Calculate a curve for the remaining volume scaling
+            const scaleRatio = Math.min(1, alienCount / maxAliens);
+            const curvedRatio = Math.pow(scaleRatio, 1.1);
+
+            const volumeRatio = baseVolumeRatio + (1 - baseVolumeRatio) * curvedRatio;
+            targetVolume = volumeRatio * maxVolume;
+        }
+
+        // Smooth transition
+        this.footstepGain.gain.setTargetAtTime(targetVolume, this.audioContext.currentTime, 0.5);
+    }
+
+    // Update mixing volume dynamically
+    setVolume(type, value) {
+        if (this.volumes[type] !== undefined) {
+            this.volumes[type] = Math.max(0, Math.min(1, value)); // clamp 0-1
+            const t = this.audioContext ? this.audioContext.currentTime : 0;
+
+            if (type === 'master' && this.masterGain) {
+                this.masterGain.gain.setValueAtTime(this.volumes.master, t);
+                if (this.backgroundMusic && !this.musicFading) {
+                    this.backgroundMusic.volume = this.volumes.music * this.volumes.master;
+                }
+            } else if (type === 'sfx' && this.sfxGain) {
+                this.sfxGain.gain.setValueAtTime(this.volumes.sfx, t);
+            } else if (type === 'music' && this.backgroundMusic && !this.musicFading) {
+                this.backgroundMusic.volume = this.volumes.music * this.volumes.master;
+            }
+        }
     }
 
     resumeAudioContext() {
@@ -18,52 +173,35 @@ export default class SoundManager {
 
     playShot() {
         if (!this.audioContext) return;
+        this.playAsset('laser', { volume: 0.7 });
+    }
+
+    playSpaceship() {
+        if (!this.audioContext) return;
+        this.playAsset('spaceship', { volume: 1.0 });
+    }
+
+    playSpaceshipLeaving() {
+        if (!this.audioContext || !this.audioBuffers['spaceship']) return;
+        const source = this.audioContext.createBufferSource();
+        source.buffer = this.audioBuffers['spaceship'];
+
+        const gainNode = this.audioContext.createGain();
         const t = this.audioContext.currentTime;
 
-        // Pick a random note from a pentatonic scale for melodic variety
-        const notes = [523, 587, 659, 784, 880, 1047, 1175, 1319];
-        const baseFreq = notes[Math.floor(Math.random() * notes.length)];
-        const waveforms = ['sine', 'triangle', 'square'];
-        const wave = waveforms[Math.floor(Math.random() * waveforms.length)];
+        // Start full volume
+        gainNode.gain.setValueAtTime(1.0, t);
 
-        // Main tone - melodic zap
-        const osc1 = this.audioContext.createOscillator();
-        osc1.type = wave;
-        osc1.frequency.setValueAtTime(baseFreq, t);
-        osc1.frequency.exponentialRampToValueAtTime(baseFreq * 0.25, t + 0.15);
+        // Fade out during the last 1 second of the 3 second window
+        gainNode.gain.setValueAtTime(1.0, t + 2.5);
+        gainNode.gain.linearRampToValueAtTime(0.01, t + 3.0);
 
-        // Harmonics layer - slightly detuned for richness
-        const osc2 = this.audioContext.createOscillator();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(baseFreq * 1.5, t);
-        osc2.frequency.exponentialRampToValueAtTime(baseFreq * 0.4, t + 0.12);
+        source.connect(gainNode);
+        gainNode.connect(this.sfxGain);
 
-        // Gain envelope - punchy attack, quick decay
-        const gain = this.audioContext.createGain();
-        gain.gain.setValueAtTime(0.6, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
-
-        // Subtle click/transient for punch
-        const click = this.audioContext.createOscillator();
-        click.type = 'square';
-        click.frequency.setValueAtTime(1800 + Math.random() * 400, t);
-        click.frequency.exponentialRampToValueAtTime(200, t + 0.03);
-        const clickGain = this.audioContext.createGain();
-        clickGain.gain.setValueAtTime(0.3, t);
-        clickGain.gain.exponentialRampToValueAtTime(0.01, t + 0.04);
-
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(this.audioContext.destination);
-        click.connect(clickGain);
-        clickGain.connect(this.audioContext.destination);
-
-        osc1.start(t);
-        osc1.stop(t + 0.2);
-        osc2.start(t);
-        osc2.stop(t + 0.15);
-        click.start(t);
-        click.stop(t + 0.05);
+        // Start now, play for 3 seconds total
+        source.start(t);
+        source.stop(t + 3.0);
     }
 
     playExplosion() {
@@ -84,7 +222,7 @@ export default class SoundManager {
         boomGain.gain.setValueAtTime(0.9, t);
         boomGain.gain.exponentialRampToValueAtTime(0.01, t + duration);
         boom.connect(boomGain);
-        boomGain.connect(this.audioContext.destination);
+        boomGain.connect(this.sfxGain);
         boom.start(t);
         boom.stop(t + duration + 0.05);
 
@@ -103,31 +241,27 @@ export default class SoundManager {
         crunchFilter.frequency.exponentialRampToValueAtTime(100, t + duration * 0.5);
         crunch.connect(crunchFilter);
         crunchFilter.connect(crunchGain);
-        crunchGain.connect(this.audioContext.destination);
+        crunchGain.connect(this.sfxGain);
         crunch.start(t);
         crunch.stop(t + duration * 0.6 + 0.05);
 
-        // Noise burst layer - textured debris
-        const bufferSize = Math.floor(this.audioContext.sampleRate * duration);
-        const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = (Math.random() * 2 - 1) * Math.exp(-4 * i / bufferSize);
+        // Noise burst layer - textured debris (reuse pre-generated buffer)
+        if (this.explosionNoiseBuffer) {
+            const noise = this.audioContext.createBufferSource();
+            noise.buffer = this.explosionNoiseBuffer;
+            const noiseGain = this.audioContext.createGain();
+            noiseGain.gain.setValueAtTime(0.7, t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, t + duration);
+            const noiseFilter = this.audioContext.createBiquadFilter();
+            noiseFilter.type = 'bandpass';
+            noiseFilter.frequency.setValueAtTime(filterFreq * 1.5, t);
+            noiseFilter.frequency.exponentialRampToValueAtTime(200, t + duration);
+            noiseFilter.Q.value = 0.8;
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(this.sfxGain);
+            noise.start(t);
         }
-        const noise = this.audioContext.createBufferSource();
-        noise.buffer = buffer;
-        const noiseGain = this.audioContext.createGain();
-        noiseGain.gain.setValueAtTime(0.7, t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + duration);
-        const noiseFilter = this.audioContext.createBiquadFilter();
-        noiseFilter.type = 'bandpass';
-        noiseFilter.frequency.setValueAtTime(filterFreq * 1.5, t);
-        noiseFilter.frequency.exponentialRampToValueAtTime(200, t + duration);
-        noiseFilter.Q.value = 0.8;
-        noise.connect(noiseFilter);
-        noiseFilter.connect(noiseGain);
-        noiseGain.connect(this.audioContext.destination);
-        noise.start(t);
     }
 
     playBackgroundMusic(musicAudio, startTime = 65) {
@@ -135,7 +269,7 @@ export default class SoundManager {
         this.backgroundMusic = musicAudio;
         this.backgroundMusic.volume = 0;
         this.backgroundMusic.currentTime = startTime;
-        
+
         // Called from user gesture handler, so play() is allowed by browser
         const playPromise = this.backgroundMusic.play();
         if (playPromise !== undefined) {
@@ -150,16 +284,17 @@ export default class SoundManager {
     fadeInMusic(duration = 2.0) {
         if (!this.backgroundMusic) return;
         this.musicFading = true;
+        // Adjust start according to global music/master volume
         const startVolume = 0;
-        const endVolume = 0.5; // Max volume at 50%
+        const endVolume = this.volumes.music * this.volumes.master;
         const startTime = Date.now();
-        
+
         const fade = () => {
             if (!this.backgroundMusic || !this.musicFading) return;
             const elapsed = (Date.now() - startTime) / 1000;
             const progress = Math.min(elapsed / duration, 1.0);
             this.backgroundMusic.volume = startVolume + (endVolume - startVolume) * progress;
-            
+
             if (progress < 1.0) {
                 requestAnimationFrame(fade);
             } else {
@@ -175,13 +310,13 @@ export default class SoundManager {
         const startVolume = this.backgroundMusic.volume;
         const endVolume = 0;
         const startTime = Date.now();
-        
+
         const fade = () => {
             if (!this.backgroundMusic) return;
             const elapsed = (Date.now() - startTime) / 1000;
             const progress = Math.min(elapsed / duration, 1.0);
             this.backgroundMusic.volume = startVolume + (endVolume - startVolume) * progress;
-            
+
             if (progress < 1.0) {
                 requestAnimationFrame(fade);
             } else {
@@ -199,6 +334,10 @@ export default class SoundManager {
             this.musicFading = false;
             this.backgroundMusic.pause();
             this.backgroundMusic.currentTime = 0;
+        }
+        if (this.footstepSource) {
+            this.footstepSource.stop();
+            this.footstepSource = null;
         }
     }
 }
