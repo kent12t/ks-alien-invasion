@@ -126,6 +126,9 @@ export class Game {
             this.app.stage.addChildAt(this.bgSprite, 0);
         }
 
+        // UDP → WebSocket bridge (only available when served via server.js)
+        this.setupUDPBridge();
+
         // Game Loop
         this.app.ticker.add((delta) => this.gameLoop(delta));
     }
@@ -240,6 +243,84 @@ export class Game {
                 if (this.uiContainer) this.uiContainer.visible = this.showDebug;
             }
         });
+    }
+
+    /**
+     * Connects to the server's WebSocket endpoint and listens for UDP-triggered commands.
+     * Falls back silently when not running through server.js (e.g. raw file:// or plain http-server).
+     *
+     * Supported commands:
+     *   { command: "start" }  — start the game (same as clicking)
+     *   { command: "reset" }  — force return to IDLE
+     */
+    setupUDPBridge() {
+        // Only attempt when served over http/https (not file://)
+        if (!window.location.protocol.startsWith('http')) {
+            console.log('[UDP Bridge] Skipping — not running over HTTP.');
+            return;
+        }
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}`;
+
+        let reconnectDelay = 1000;
+        const maxDelay = 16000;
+
+        const connect = () => {
+            const ws = new WebSocket(wsUrl);
+
+            ws.addEventListener('open', () => {
+                console.log('[UDP Bridge] WebSocket connected to', wsUrl);
+                reconnectDelay = 1000; // reset back-off on success
+            });
+
+            ws.addEventListener('message', (event) => {
+                let payload;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch {
+                    console.warn('[UDP Bridge] Non-JSON message ignored:', event.data);
+                    return;
+                }
+
+                console.log('[UDP Bridge] Received command:', payload.command);
+
+                switch (payload.command) {
+                    case 'start':
+                        if (this.gameState === 'IDLE') {
+                            // Resume audio context (browsers require a user-gesture for audio;
+                            // the initial click to open the browser counts, so this should be fine)
+                            if (this.soundManager) {
+                                this.soundManager.resumeAudioContext();
+                            }
+                            this.startGame();
+                        } else {
+                            console.log('[UDP Bridge] "start" ignored — game is not IDLE (state:', this.gameState, ')');
+                        }
+                        break;
+
+                    case 'reset':
+                        this.returnToIdle();
+                        break;
+
+                    default:
+                        console.warn('[UDP Bridge] Unknown command:', payload.command);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                console.log(`[UDP Bridge] WebSocket closed. Reconnecting in ${reconnectDelay}ms…`);
+                setTimeout(connect, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+            });
+
+            ws.addEventListener('error', (err) => {
+                // Error fires before close, so we just log it
+                console.warn('[UDP Bridge] WebSocket error (will reconnect):', err.type);
+            });
+        };
+
+        connect();
     }
 
     setupDebugUI() {
