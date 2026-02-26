@@ -181,6 +181,9 @@ export default class SoundManager {
 
     playShot() {
         if (!this.audioContext) return;
+        const now = performance.now();
+        if (now - (this._lastShotTime || 0) < 80) return; // max ~12 laser sounds/sec
+        this._lastShotTime = now;
         this.playAsset('laser', { volume: 0.7 });
     }
 

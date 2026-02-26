@@ -9,18 +9,22 @@ body {
     background: #000;
     color: #fff;
     overflow: hidden;
-    touch-action: pan-x pan-y;
+    /* Prevent all default touch gestures (pan, zoom, double-tap) */
+    touch-action: none;
     user-select: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
+    /* Center the 3194×1080 game area; black bars fill the remainder */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
 }
 
 .screen {
-    position: absolute;
-    width: 100%;
-    height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -45,6 +49,10 @@ body {
 #gameScreen {
     background: #000;
     position: relative;
+    /* Largest 3194×1080 box that fits the viewport — black bars fill any remaining space */
+    width: min(100vw, calc(100vh * 3194 / 1080));
+    height: min(100vh, calc(100vw * 1080 / 3194));
+    aspect-ratio: 3194 / 1080;
 }
 
 /* Gun modes removed */

@@ -57,7 +57,7 @@ export class Game {
         // Create Pixi Application
         this.app = new PIXI.Application({
             view: canvasElement,
-            resizeTo: window,
+            resizeTo: document.getElementById('gameScreen'),
             backgroundColor: 0x000000, // Black
             antialias: true,
             autoDensity: true,
@@ -210,14 +210,21 @@ export class Game {
 
     setupEventListeners() {
         const c = this.app.view;
-        c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+
+        // Track which pointers are currently held down so pointermove can fire as taps
+        this.activePointers = new Set();
+
+        // touchstart: preventDefault only — no queueing (avoids double input with pointerdown)
+        c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
+
         c.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            // Capture coordinates immediately before any other work
-            const x = e.clientX;
-            const y = e.clientY;
+            // Coordinates relative to canvas so they stay correct with black-bar letterboxing
+            const rect = c.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
 
-            // Resume audio context synchronously (fire-and-forget) on every click
+            // Resume audio context synchronously (fire-and-forget) on every interaction
             if (this.soundManager) {
                 this.soundManager.resumeAudioContext();
             }
@@ -227,11 +234,43 @@ export class Game {
                 return;
             }
 
+            this.activePointers.add(e.pointerId);
             this.inputQueue.push({ x, y });
-        }, { capture: true });
-        c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-        c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-        c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
+        }, { passive: false, capture: true });
+
+        // pointermove: every position update while a pointer is held = another tap
+        c.addEventListener('pointermove', (e) => {
+            if (!this.activePointers.has(e.pointerId)) return;
+            if (this.gameState !== 'ACTIVE') return;
+
+            const rect = c.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.inputQueue.push({ x, y });
+        }, { passive: true, capture: true });
+
+        // pointerup / pointercancel: stop treating this pointer as active
+        c.addEventListener('pointerup', (e) => {
+            this.activePointers.delete(e.pointerId);
+        }, { passive: true, capture: true });
+
+        c.addEventListener('pointercancel', (e) => {
+            this.activePointers.delete(e.pointerId);
+        }, { passive: true, capture: true });
+
+        c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false, capture: true });
+        c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false, capture: true });
+        c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false, capture: true });
+
+        // Block ctrl+scroll / trackpad pinch-to-zoom (fires as wheel with ctrlKey)
+        document.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) e.preventDefault();
+        }, { passive: false, capture: true });
+
+        // Block Safari native pinch-to-zoom (gesture events are Safari-only)
+        document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false, capture: true });
+        document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false, capture: true });
+        document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false, capture: true });
 
         window.addEventListener('resize', () => {
             if (this.bgSprite) this.resizeBackground();
