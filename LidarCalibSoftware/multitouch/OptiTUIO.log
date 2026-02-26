@@ -1,9 +1,18 @@
-INFO  2026-02-25T15:50:12.537 Interactive Asia OptiTUIO V1.4.3 BETA starting up 
-TRACE 2026-02-25T15:50:12.539 Switching locale to C (from application settings) 
-TRACE 2026-02-25T15:50:12.540 Showing main window 
-TRACE 2026-02-25T15:50:12.557 Creating new configuration file 
-TRACE 2026-02-25T15:50:29.933 Loading configuration file "C:/Users/Kent/Desktop/Onedrive/OneDrive - OFF THE BEATEN TRACK PTE. LTD/Documents/Github/ks-alien-invasion/LidarCalibSoftware/multitouch/floor.otxml" 
-TRACE 2026-02-25T15:50:29.936 Initializing Windows 8 touch injection API 
-TRACE 2026-02-25T15:50:29.937 Initialization of Windows 8 touch injection API succeeded 
-TRACE 2026-02-25T15:50:49.297 Loading configuration file "C:/Users/Kent/Desktop/Onedrive/OneDrive - OFF THE BEATEN TRACK PTE. LTD/Documents/Github/ks-alien-invasion/LidarCalibSoftware/multitouch/trivex-single.otxml" 
-INFO  2026-02-25T17:26:43.169 Exit 
+INFO  2026-02-26T16:39:26.990 Interactive Asia OptiTUIO V1.4.3 BETA starting up 
+TRACE 2026-02-26T16:39:26.990 Switching locale to C (from application settings) 
+TRACE 2026-02-26T16:39:26.990 Showing main window 
+TRACE 2026-02-26T16:39:27.005 Creating new configuration file 
+TRACE 2026-02-26T16:39:38.823 Loading configuration file "C:/Users/Kent/Desktop/Onedrive/OneDrive - OFF THE BEATEN TRACK PTE. LTD/Documents/Github/ks-alien-invasion/LidarCalibSoftware/multitouch/kidstop.otxml" 
+TRACE 2026-02-26T16:39:38.825 Initializing Windows 8 touch injection API 
+TRACE 2026-02-26T16:39:38.825 Initialization of Windows 8 touch injection API succeeded 
+INFO  2026-02-26T16:40:25.522 Hokuyo URG New device: State changed to Started 
+INFO  2026-02-26T16:40:25.526 Hokuyo URG New device: State changed to Connected 
+INFO  2026-02-26T16:40:25.527 Hokuyo URG New device: State changed to Sent stop measurement command 
+INFO  2026-02-26T16:40:25.537 Hokuyo URG New device: State changed to Sent version information command 
+INFO  2026-02-26T16:40:25.540 Hokuyo URG New device: State changed to Sent sensor specifications command 
+INFO  2026-02-26T16:40:25.544 Hokuyo URG New device: State changed to Sent begin measurement command 
+INFO  2026-02-26T16:40:25.589 Hokuyo URG New device: State changed to Sent measurement data command 
+INFO  2026-02-26T16:40:25.592 Hokuyo URG New device: State changed to Running 
+INFO  2026-02-26T16:45:43.812 Exit 
+ERROR 2026-02-26T16:45:43.814 Hokuyo URG New device: Read failed (The network connection was aborted by the local system (system)) 
+INFO  2026-02-26T16:45:43.814 Hokuyo URG New device: State changed to Stopped 
