@@ -1,27 +1,30 @@
 * {
+    box-sizing: border-box;
+}
+
+html,
+body {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    /* Prevent all default touch gestures (pan, zoom, double-tap, overscroll) */
+    touch-action: none;
+    -ms-touch-action: none;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 body {
     font-family: 'Arial', sans-serif;
     background: #000;
     color: #fff;
-    overflow: hidden;
-    /* Prevent all default touch gestures (pan, zoom, double-tap) */
-    touch-action: none;
-    user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    /* Center the 3194×1080 game area; black bars fill the remainder */
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100vw;
-    height: 100vh;
 }
 
 .screen {

@@ -52,6 +52,12 @@ async function initPixi() {
         resolution: window.devicePixelRatio || 1
     });
 
+    // Ensure touch-action is none to eliminate delay
+    canvasElement.style.touchAction = 'none';
+    canvasElement.style.userSelect = 'none';
+    canvasElement.style.webkitUserSelect = 'none';
+    canvasElement.style.webkitTouchCallout = 'none';
+
     // Create Layers (Order matters!)
     shadowContainer = new PIXI.Container();
     // shadowContainer.sortableChildren = true; // Optional, if we want shadows to sort distantly
@@ -236,18 +242,65 @@ class SoundManager {
 }
 
 function setupEventListeners() {
+    const c = app.view;
+
+    // Track which pointers are currently held down so pointermove can fire as taps
+    const activePointers = new Set();
+
     function queueInput(x, y) {
         inputQueue.push({ x: x, y: y });
     }
-    const c = app.view;
-    c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+
+    // touchstart: preventDefault only — no queueing (avoids double input with pointerdown)
+    c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
+
     c.addEventListener('pointerdown', (e) => {
+        // Explicitly claim this pointer for this element to prevent browser gesture cancellation
+        if (c.setPointerCapture) {
+            c.setPointerCapture(e.pointerId);
+        }
+
         e.preventDefault();
-        queueInput(e.clientX, e.clientY);
-    }, { capture: true });
-    c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-    c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
+        const rect = c.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (soundManager && soundManager.audioContext) {
+            soundManager.audioContext.resume();
+        }
+
+        activePointers.add(e.pointerId);
+        queueInput(x, y);
+    }, { passive: false, capture: true });
+
+    // pointermove: every position update while a pointer is held = another tap
+    c.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+
+        const rect = c.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        queueInput(x, y);
+    }, { passive: true, capture: true });
+
+    // pointerup / pointercancel: stop treating this pointer as active
+    c.addEventListener('pointerup', (e) => {
+        if (c.releasePointerCapture) {
+            c.releasePointerCapture(e.pointerId);
+        }
+        activePointers.delete(e.pointerId);
+    }, { passive: true, capture: true });
+
+    c.addEventListener('pointercancel', (e) => {
+        if (c.releasePointerCapture) {
+            c.releasePointerCapture(e.pointerId);
+        }
+        activePointers.delete(e.pointerId);
+    }, { passive: true, capture: true });
+
+    c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false, capture: true });
+    c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false, capture: true });
+    c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false, capture: true });
 
     // Resize Handling
     window.addEventListener('resize', () => {

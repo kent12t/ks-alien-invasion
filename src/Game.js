@@ -64,6 +64,12 @@ export class Game {
             resolution: window.devicePixelRatio || 1
         });
 
+        // Ensure touch-action is none to eliminate delay
+        canvasElement.style.touchAction = 'none';
+        canvasElement.style.userSelect = 'none';
+        canvasElement.style.webkitUserSelect = 'none';
+        canvasElement.style.webkitTouchCallout = 'none';
+
         // Create Layers
         this.shadowContainer = new PIXI.Container();
         this.app.stage.addChild(this.shadowContainer);
@@ -218,6 +224,11 @@ export class Game {
         c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
 
         c.addEventListener('pointerdown', (e) => {
+            // Explicitly claim this pointer for this element to prevent browser gesture cancellation (like pinch-zoom)
+            if (c.setPointerCapture) {
+                c.setPointerCapture(e.pointerId);
+            }
+
             e.preventDefault();
             // Coordinates relative to canvas so they stay correct with black-bar letterboxing
             const rect = c.getBoundingClientRect();
@@ -251,10 +262,16 @@ export class Game {
 
         // pointerup / pointercancel: stop treating this pointer as active
         c.addEventListener('pointerup', (e) => {
+            if (c.releasePointerCapture) {
+                c.releasePointerCapture(e.pointerId);
+            }
             this.activePointers.delete(e.pointerId);
         }, { passive: true, capture: true });
 
         c.addEventListener('pointercancel', (e) => {
+            if (c.releasePointerCapture) {
+                c.releasePointerCapture(e.pointerId);
+            }
             this.activePointers.delete(e.pointerId);
         }, { passive: true, capture: true });
 
