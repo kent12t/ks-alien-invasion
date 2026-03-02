@@ -27,6 +27,7 @@ export class Game {
         this.gameStartTime = 0;
         this.gameTime = -1; // Second counter
         this.currentWaveIndex = -1;
+        this.waveSpawnCount = 0;
         this.bossSpawned = false;
         this.bossDefeated = false;
 
@@ -147,6 +148,7 @@ export class Game {
         this.bossSpawned = false;
         this.bossDefeated = false;
         this.currentWaveIndex = -1;
+        this.waveSpawnCount = 0;
         this.spaceshipLeavingTriggered = false;
         this.spaceshipAudioExiting = false;
         this.alienKillTriggered = false;
@@ -540,38 +542,44 @@ export class Game {
     }
 
     spawnLogic(now) {
-        if (this.bossDefeated) return;
+        if (this.gameTime >= CONFIG.TIMELINE.ALIEN_SPAWN_END) return;
 
         // Wave Logic
         let currentWave = null;
+        let waveIndex = -1;
         for (let i = 0; i < CONFIG.WAVES.length; i++) {
             const w = CONFIG.WAVES[i];
             if (this.gameTime >= w.start && this.gameTime < w.end) {
                 currentWave = w;
-                this.currentWaveIndex = i;
+                waveIndex = i;
                 break;
             }
         }
 
         if (currentWave) {
+            // New Wave Transition
+            if (this.currentWaveIndex !== waveIndex) {
+                this.currentWaveIndex = waveIndex;
+                this.waveSpawnCount = 0;
+                this.lastSpawnTime = now; // Reset timer for the new wave
+            }
+
             // Check Boss
             if (currentWave.type === 'boss_wave' && !this.bossSpawned) {
                 this.bossSpawned = true;
                 const boss = new Pirate(this.app, this.gameContainer, this.shadowContainer, true);
                 this.pirates.push(boss);
-                // Spaceship STAYS until end
             }
 
-            // Minion Spawning
-            // If boss wave, we might still spawn minions? Original code didn't specify mixed.
-            // Let's assume spawn rate applies to minions always unless it's ONLY boss?
-            // "count: 30" -> Maybe limit?
+            // Dynamic Minion Spawning
+            const waveDuration = currentWave.end - currentWave.start;
+            const spawnInterval = (waveDuration * 1000) / currentWave.count;
 
-            // Simple timer based spawn
-            if (now - this.lastSpawnTime > CONFIG.SPAWN_RATE) {
+            if (now - this.lastSpawnTime > spawnInterval && this.waveSpawnCount < currentWave.count) {
                 this.lastSpawnTime = now;
                 const p = new Pirate(this.app, this.gameContainer, this.shadowContainer, false);
                 this.pirates.push(p);
+                this.waveSpawnCount++;
             }
         }
     }
