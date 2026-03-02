@@ -111,7 +111,11 @@ export class Game {
             'assets/audio/long_gurgles.aac',
             'assets/audio/steps_v1.wav',
             'assets/audio/laser.aac',
-            'assets/audio/spaceship.wav'
+            'assets/audio/spaceship.wav',
+            'assets/audio/rex1.mp3',
+            'assets/audio/rex2.mp3',
+            'assets/audio/rex3.mp3',
+            'assets/audio/rex4.mp3'
         ];
         if (this.soundManager) {
             await this.soundManager.preloadAudio(audioAssets);
@@ -180,6 +184,7 @@ export class Game {
 
             // Spaceship audio starts at 0s:
             this.soundManager.playSpaceship();
+            this.soundManager.resetTimeline();
         }
     }
 
@@ -538,7 +543,10 @@ export class Game {
             }
         }
 
-
+        // Timeline Sounds
+        if (this.soundManager) {
+            this.soundManager.updateTimeline(this.gameTime, CONFIG.SCHEDULED_SOUNDS, CONFIG.AUDIO.SPEECH_VOLUME);
+        }
     }
 
     spawnLogic(now) {

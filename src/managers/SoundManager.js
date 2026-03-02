@@ -25,6 +25,7 @@ export default class SoundManager {
         this.alienMuted = false;
         this.explosionNoiseBuffer = null;
         this.audioBuffers = {}; // Map of preloaded audio buffers
+        this.timelineEvents = new Set(); // Track played scheduled events
 
         if (this.audioContext) {
             // Setup master and sfx busses
@@ -152,6 +153,29 @@ export default class SoundManager {
 
         // Smooth transition
         this.footstepGain.gain.setTargetAtTime(targetVolume, this.audioContext.currentTime, 0.5);
+    }
+
+    /**
+     * Updates the audio timeline. Checks if any scheduled sounds should be triggered.
+     * @param {number} gameTime - Current elapsed game time in seconds.
+     * @param {Object} scheduledSounds - Key-value pairs of time: 'assetName'.
+     * @param {number} volume - Optional volume to play the asset at.
+     */
+    updateTimeline(gameTime, scheduledSounds = {}, volume = 1.0) {
+        if (!this.audioContext) return;
+
+        for (const [timeStr, assetName] of Object.entries(scheduledSounds)) {
+            const triggerTime = parseFloat(timeStr);
+            if (gameTime >= triggerTime && !this.timelineEvents.has(timeStr)) {
+                this.timelineEvents.add(timeStr);
+                this.playAsset(assetName, { volume });
+            }
+        }
+    }
+
+    resetTimeline() {
+        this.timelineEvents.clear();
+        this.alienMuted = false;
     }
 
     // Update mixing volume dynamically

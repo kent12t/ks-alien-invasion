@@ -61,6 +61,13 @@ export const CONFIG = {
         GAME_END: 90
     },
 
+    SCHEDULED_SOUNDS: {
+        "10.0": "rex1",
+        "30.0": "rex2",
+        "50.0": "rex3",
+        "70.0": "rex4"
+    },
+
     WAVES: [
         { start: 4, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
         { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
@@ -76,7 +83,8 @@ export const CONFIG = {
     // Audio & Ambiance
     AUDIO: {
         MAX_FOOTSTEP_ALIENS: 30,       // Alien count at which footsteps reach max volume
-        MAX_FOOTSTEP_VOLUME: 4.0,      // The max volume of the footprint footsteps
-        GRUNT_CHANCE_PER_ALIEN: 0.0003 // Per-frame chance an alien will scream/grunt (adjust based on FPS)
+        MAX_FOOTSTEP_VOLUME: 3.0,      // The max volume of the footprint footsteps
+        GRUNT_CHANCE_PER_ALIEN: 0.0003, // Per-frame chance an alien will scream/grunt (adjust based on FPS)
+        SPEECH_VOLUME: 3.0             // Volume for scheduled speech clips (rex1-4)
     }
 };
