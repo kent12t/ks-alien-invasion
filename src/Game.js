@@ -297,7 +297,6 @@ export class Game {
             }
 
             if (this.gameState === 'IDLE') {
-                this.startGame();
                 return;
             }
 
@@ -354,6 +353,13 @@ export class Game {
             if (e.key === '1') {
                 this.showDebug = !this.showDebug;
                 if (this.uiContainer) this.uiContainer.visible = this.showDebug;
+            }
+            if (e.code === 'Space' && this.gameState === 'IDLE') {
+                // Resume audio context on user gesture
+                if (this.soundManager) {
+                    this.soundManager.resumeAudioContext();
+                }
+                this.startGame();
             }
         });
     }
