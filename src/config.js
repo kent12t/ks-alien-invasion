@@ -56,7 +56,7 @@ export const CONFIG = {
         ALIEN_SPAWN_START: 0,
         ALIEN_SPAWN_END: 80,
         ALIEN_KILL_TRIGGER: 85,
-        GAME_END: 90
+        GAME_END: 93
     },
 
     SCHEDULED_SOUNDS: {
@@ -84,17 +84,27 @@ export const CONFIG = {
         MAX_FOOTSTEP_ALIENS: 30,       // Alien count at which footsteps reach max volume
         MAX_FOOTSTEP_VOLUME: 3.0,      // The max volume of the footprint footsteps
         GRUNT_CHANCE_PER_ALIEN: 0.0003, // Per-frame chance an alien will scream/grunt (adjust based on FPS)
-        SPEECH_VOLUME: 4.0,             // Volume for scheduled speech clips (rex1-4)
-        BGM_VOLUME: 0.8                // Background music volume (louder as requested)
+        SPEECH_VOLUME: 4.5,             // Volume for scheduled speech clips (rex1-4)
+        BGM_VOLUME: 0.7                // Background music volume (louder as requested)
     },
 
     // Overlays
     OVERLAYS: {
-        INTERVAL_MIN: 5,               // Minimum swap interval in seconds
-        INTERVAL_MAX: 10,              // Maximum swap interval in seconds
+        GAME_DURATION: 90,             // Total active game time
+        SEQUENTIAL_INTERVAL: 7.5,      // 90 / 12 = 7.5s
         ASSETS: [
             'assets/overlays/overlay_a.webp',
-            'assets/overlays/overlay_b.webp'
+            'assets/overlays/overlay_b.webp',
+            'assets/overlays/overlay_c.webp',
+            'assets/overlays/overlay_d.webp',
+            'assets/overlays/overlay_e.webp',
+            'assets/overlays/overlay_f.webp',
+            'assets/overlays/overlay_g.webp',
+            'assets/overlays/overlay_h.webp',
+            'assets/overlays/overlay_i.webp',
+            'assets/overlays/overlay_j.webp',
+            'assets/overlays/overlay_k.webp',
+            'assets/overlays/overlay_l.webp'
         ]
     },
 

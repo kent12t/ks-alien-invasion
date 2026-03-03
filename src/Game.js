@@ -199,9 +199,8 @@ export class Game {
         // Start Overlays
         if (this.overlaySprite) {
             this.overlaySprite.visible = true;
-            this.currentOverlayIndex = Math.floor(Math.random() * resources.overlays.length);
+            this.currentOverlayIndex = 0; // Starts at overlay_a
             this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
-            this.setNextOverlaySwap(Date.now());
         }
     }
 
@@ -225,6 +224,7 @@ export class Game {
 
         if (this.overlaySprite) {
             this.overlaySprite.visible = true;
+            this.currentOverlayIndex = 0;
             this.overlaySprite.texture = resources.overlays[0]; // Reset to overlay_a
             this.resizeOverlay();
         }
@@ -706,19 +706,20 @@ export class Game {
         }
     }
 
-    setNextOverlaySwap(now) {
-        const interval = (CONFIG.OVERLAYS.INTERVAL_MIN + Math.random() * (CONFIG.OVERLAYS.INTERVAL_MAX - CONFIG.OVERLAYS.INTERVAL_MIN)) * 1000;
-        this.nextOverlaySwapTime = now + interval;
-    }
-
     updateOverlay(now) {
-        if (this.gameState !== 'ACTIVE' || !this.overlaySprite) return;
+        if (this.gameState !== 'ACTIVE' || !this.overlaySprite || resources.overlays.length === 0) return;
 
-        if (now >= this.nextOverlaySwapTime) {
-            this.currentOverlayIndex = (this.currentOverlayIndex + 1) % resources.overlays.length;
+        // Sequence through overlays A-L (indices 0-11)
+        // Interval is 90 / 12 = 7.5 seconds
+        const newIndex = Math.min(
+            resources.overlays.length - 1,
+            Math.floor(this.gameTime / CONFIG.OVERLAYS.SEQUENTIAL_INTERVAL)
+        );
+
+        if (newIndex !== this.currentOverlayIndex) {
+            this.currentOverlayIndex = newIndex;
             this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
-            this.resizeOverlay(); // Re-scale if texture dims differ (though they probably don't)
-            this.setNextOverlaySwap(now);
+            this.resizeOverlay();
         }
     }
 }
