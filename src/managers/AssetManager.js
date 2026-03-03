@@ -5,7 +5,10 @@ export const resources = {
     captainFrames: [],
     minionFrames: [],
     spaceshipFrames: [],
+    // Physics / Interaction
     parts: [],
+    // Overlays
+    overlays: [],
     // Static Fallback Textures
     ship: null,
     kraken: null,
@@ -45,6 +48,12 @@ export async function loadAssets() {
     for (let i = 0; i < 14; i++) {
         const t = await PIXI.Texture.from(`assets/part${i}.png`);
         resources.parts.push(t);
+    }
+
+    // 4. Overlays
+    for (const path of CONFIG.OVERLAYS.ASSETS) {
+        const t = await PIXI.Assets.load(path);
+        resources.overlays.push(t);
     }
 
     // 4. Music

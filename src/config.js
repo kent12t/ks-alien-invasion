@@ -86,5 +86,15 @@ export const CONFIG = {
         MAX_FOOTSTEP_VOLUME: 3.0,      // The max volume of the footprint footsteps
         GRUNT_CHANCE_PER_ALIEN: 0.0003, // Per-frame chance an alien will scream/grunt (adjust based on FPS)
         SPEECH_VOLUME: 3.0             // Volume for scheduled speech clips (rex1-4)
+    },
+
+    // Overlays
+    OVERLAYS: {
+        INTERVAL_MIN: 5,               // Minimum swap interval in seconds
+        INTERVAL_MAX: 10,              // Maximum swap interval in seconds
+        ASSETS: [
+            'assets/overlays/overlay_a.webp',
+            'assets/overlays/overlay_b.webp'
+        ]
     }
 };

@@ -12,6 +12,7 @@ export class Game {
         this.shadowContainer = null;
         this.gameContainer = null;
         this.uiContainer = null;
+        this.overlayContainer = null;
 
         this.soundManager = null;
         this.spaceship = null;
@@ -50,6 +51,9 @@ export class Game {
         this.countText = null;
 
         this.bgSprite = null;
+        this.overlaySprite = null;
+        this.currentOverlayIndex = 0;
+        this.nextOverlaySwapTime = 0;
     }
 
     async init() {
@@ -81,6 +85,9 @@ export class Game {
 
         this.uiContainer = new PIXI.Container();
         this.app.stage.addChild(this.uiContainer);
+
+        this.overlayContainer = new PIXI.Container();
+        this.app.stage.addChild(this.overlayContainer);
 
         // Loading Screen
         const loadingStyle = new PIXI.TextStyle({
@@ -137,6 +144,15 @@ export class Game {
             this.app.stage.addChildAt(this.bgSprite, 0);
         }
 
+        // Init Overlay
+        if (resources.overlays && resources.overlays.length > 0) {
+            this.overlaySprite = new PIXI.Sprite(resources.overlays[0]);
+            this.overlaySprite.anchor.set(0.5);
+            this.overlaySprite.visible = true;
+            this.resizeOverlay();
+            this.overlayContainer.addChild(this.overlaySprite);
+        }
+
         // UDP → WebSocket bridge (only available when served via server.js)
         this.setupUDPBridge();
 
@@ -186,6 +202,14 @@ export class Game {
             this.soundManager.playSpaceship();
             this.soundManager.resetTimeline();
         }
+
+        // Start Overlays
+        if (this.overlaySprite) {
+            this.overlaySprite.visible = true;
+            this.currentOverlayIndex = Math.floor(Math.random() * resources.overlays.length);
+            this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
+            this.setNextOverlaySwap(Date.now());
+        }
     }
 
     returnToIdle() {
@@ -207,6 +231,12 @@ export class Game {
         if (this.soundManager) {
             this.soundManager.stopMusic();
         }
+
+        if (this.overlaySprite) {
+            this.overlaySprite.visible = true;
+            this.overlaySprite.texture = resources.overlays[0]; // Reset to overlay_a
+            this.resizeOverlay();
+        }
     }
 
     resizeBackground() {
@@ -219,6 +249,18 @@ export class Game {
         this.bgSprite.scale.set(scale);
         this.bgSprite.x = sw / 2;
         this.bgSprite.y = sh / 2;
+    }
+
+    resizeOverlay() {
+        if (!this.overlaySprite) return;
+        const sw = this.app.screen.width;
+        const sh = this.app.screen.height;
+        const tex = this.overlaySprite.texture;
+
+        const scale = Math.max(sw / tex.width, sh / tex.height);
+        this.overlaySprite.scale.set(scale);
+        this.overlaySprite.x = sw / 2;
+        this.overlaySprite.y = sh / 2;
     }
 
     setupEventListeners() {
@@ -298,6 +340,7 @@ export class Game {
 
         window.addEventListener('resize', () => {
             if (this.bgSprite) this.resizeBackground();
+            this.resizeOverlay();
         });
 
         window.addEventListener('keydown', (e) => {
@@ -547,6 +590,9 @@ export class Game {
         if (this.soundManager) {
             this.soundManager.updateTimeline(this.gameTime, CONFIG.SCHEDULED_SOUNDS, CONFIG.AUDIO.SPEECH_VOLUME);
         }
+
+        // Update Overlays
+        this.updateOverlay(now);
     }
 
     spawnLogic(now) {
@@ -664,6 +710,22 @@ export class Game {
                 this.soundManager.playExplosion();
                 this.soundManager.playAlienDeath((x / this.app.screen.width) * 2 - 1); // Pan based on click
             }
+        }
+    }
+
+    setNextOverlaySwap(now) {
+        const interval = (CONFIG.OVERLAYS.INTERVAL_MIN + Math.random() * (CONFIG.OVERLAYS.INTERVAL_MAX - CONFIG.OVERLAYS.INTERVAL_MIN)) * 1000;
+        this.nextOverlaySwapTime = now + interval;
+    }
+
+    updateOverlay(now) {
+        if (this.gameState !== 'ACTIVE' || !this.overlaySprite) return;
+
+        if (now >= this.nextOverlaySwapTime) {
+            this.currentOverlayIndex = (this.currentOverlayIndex + 1) % resources.overlays.length;
+            this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
+            this.resizeOverlay(); // Re-scale if texture dims differ (though they probably don't)
+            this.setNextOverlaySwap(now);
         }
     }
 }
