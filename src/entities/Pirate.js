@@ -256,7 +256,7 @@ export class Pirate {
     }
 
     takeDamage() {
-        this.hp--;
+        this.hp = Math.max(0, this.hp - 1);
     }
 
     getCurrentTexture() {

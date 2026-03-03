@@ -67,9 +67,9 @@ export const CONFIG = {
     },
 
     WAVES: [
-        { start: 0, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
-        { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
-        { start: 43, end: 80, count: 30, type: 'boss_wave', label: 'Wave 3' }
+        { start: 0, end: 23, count: 40, type: 'minion_only', label: 'Wave 1' },
+        { start: 23, end: 43, count: 60, type: 'minion_only', label: 'Wave 2' },
+        { start: 43, end: 80, count: 50, type: 'boss_wave', label: 'Wave 3' }
     ],
 
     BOSS: {

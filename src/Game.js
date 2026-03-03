@@ -503,9 +503,19 @@ export class Game {
 
             for (let i = this.pirates.length - 1; i >= 0; i--) {
                 const p = this.pirates[i];
-                // Only create explosion if we're not clearing the screen for other reasons?
-                // This is the timeline kill.
-                this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
+
+                if (p.isBoss) {
+                    // Massive bombastic explosion for the Boss at the end
+                    const spriteCenterY = p.screenY - (200 * p.scale);
+                    for (let k = 0; k < 30; k++) {
+                        const ex = p.screenX + (Math.random() - 0.5) * 400 * p.scale;
+                        const ey = spriteCenterY + (Math.random() - 0.5) * 400 * p.scale;
+                        this.explosions.push(new Explosion(ex, ey, this.gameContainer));
+                    }
+                } else {
+                    this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
+                }
+
                 p.destroy();
             }
             this.pirates = [];
@@ -661,21 +671,11 @@ export class Game {
                     let killed = false;
                     if (p.isBoss) {
                         p.takeDamage();
+                        hitCount++; // Provide hit feedback/score
                         if (p.hp <= 0) {
-                            killed = true;
+                            // Boss HP is 0, but he should NOT die yet (killed = false)
+                            killed = false;
                             this.bossDefeated = true;
-                            // Boss Explosion - Massive Achievement Feeling
-                            // "bombastic" -> lots of explosions spread out
-                            for (let k = 0; k < 30; k++) {
-                                // Spread out more: +/- 200px
-                                const ex = p.screenX + (Math.random() - 0.5) * 400 * p.scale;
-                                const ey = spriteCenterY + (Math.random() - 0.5) * 400 * p.scale;
-                                // Delay some of them?
-                                // For now, simple immediate massive cluster.
-                                // We could add delay prop to Explosion? 
-                                // Or just spawn them all and let physics spread them.
-                                this.explosions.push(new Explosion(ex, ey, this.gameContainer));
-                            }
                         } else {
                             // Hit effect but not dead - "Bombastic" feedback
                             // Spawn 3-5 small explosions/sparks on hit
