@@ -22,17 +22,18 @@ export const CONFIG = {
     MIN_SCALE: 0.1,            // Minimum size scale for objects far away
 
     // World Dimensions (World Units)
-    FLOOR_Y: 340,              // Vertical position of the floor (relative to center)
+    FLOOR_Y: 250,              // Vertical position of the floor (relative to center)
 
     // Z-Depth Settings (Distance from Camera)
-    Z_START: 900,             // Starting distance (Spawn point)
+    Z_START: 1500,             // Starting distance (Spawn point) - Further away means smaller at spawn
     Z_SPEED: 5,                // Base movement speed towards camera
+    ALIEN_BASE_SIZE: 350,     // Base size for alien normalization (was 420)
 
     // Fog / Atmosphere
     FOG: {
         ENABLED: true,
         START_Z: 300,          // Distances closer than this are fully visible
-        END_Z: 1000,           // Distances further than this are fully darkened
+        END_Z: 1600,           // Further away due to increased Z_START
         TINT_COLOR: 0x000000   // Color to fade towards (0x000000 = Dark/Night)
     },
 
@@ -52,12 +53,9 @@ export const CONFIG = {
     TIMELINE: {
         GAME_LENGTH: 90,             // Total active game time
         SPACESHIP_AUDIO_START: 0,
-        SPACESHIP_VISUAL_START: 0.5,
-        ALIEN_SPAWN_START: 4,
+        ALIEN_SPAWN_START: 0,
         ALIEN_SPAWN_END: 80,
         ALIEN_KILL_TRIGGER: 85,
-        SPACESHIP_EXIT_AUDIO_START: 86,
-        SPACESHIP_EXIT_VISUAL_START: 87,
         GAME_END: 90
     },
 
@@ -69,14 +67,14 @@ export const CONFIG = {
     },
 
     WAVES: [
-        { start: 4, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
+        { start: 0, end: 23, count: 30, type: 'minion_only', label: 'Wave 1' },
         { start: 23, end: 43, count: 50, type: 'minion_only', label: 'Wave 2' },
         { start: 43, end: 80, count: 30, type: 'boss_wave', label: 'Wave 3' }
     ],
 
     BOSS: {
         HP: 20,
-        SCALE: 1.8,
+        SCALE: 1.2,
         HIT_BOUNCE: 1.2
     },
 
@@ -96,5 +94,11 @@ export const CONFIG = {
             'assets/overlays/overlay_a.webp',
             'assets/overlays/overlay_b.webp'
         ]
+    },
+
+    // Spaceship Props
+    SPACESHIP: {
+        WORLD_Y: -100,                 // Lowered from -300 to be closer to the action
+        TARGET_Z: 450
     }
 };

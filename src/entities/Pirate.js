@@ -18,7 +18,7 @@ export class Pirate {
         // Shadow Setup (Back Layer)
         this.shadow = new PIXI.Graphics();
         this.shadow.beginFill(0x000000, 0.3); // Black, 30% opacity
-        this.shadow.drawEllipse(0, 0, 100, 30); // Base size oval
+        this.shadow.drawEllipse(0, 0, 60, 20); // Reduced from 100, 30
         this.shadow.endFill();
         shadowContainer.addChild(this.shadow); // Add to Shadow Layer
 
@@ -150,8 +150,8 @@ export class Pirate {
 
         this.screenX = cx + this.worldX * this.scale;
 
-        // Shadow Y (Always on floor)
-        const shadowScreenY = cy + this.worldY * this.scale;
+        // Shadow Y (Always on floor, slightly elevated to meet the bottom of the and normalized sprites)
+        const shadowScreenY = cy + (this.worldY - 40) * this.scale;
 
         // Sprite Y (Affected by Jump)
         const effectiveWorldY = this.worldY - this.jumpY;
@@ -177,14 +177,14 @@ export class Pirate {
             this.sprite.texture = tex;
             const w = tex.width || 1000;
             const h = tex.height || 1000;
-            const norm = 500 / Math.max(w, h);
+            const norm = CONFIG.ALIEN_BASE_SIZE / Math.max(w, h);
             this.sprite.scale.set(this.scale * norm);
         } else if (this.fallback && this.fallback.baseTexture) {
             // Use fallback texture if valid
             this.sprite.texture = this.fallback;
             const w = this.fallback.width || 1000;
             const h = this.fallback.height || 1000;
-            const norm = 500 / Math.max(w, h);
+            const norm = CONFIG.ALIEN_BASE_SIZE / Math.max(w, h);
             this.sprite.scale.set(this.scale * norm);
         } else {
             // No valid texture – keep previous texture and log warning

@@ -32,8 +32,6 @@ export class Game {
         this.bossSpawned = false;
         this.bossDefeated = false;
 
-        this.spaceshipAudioExiting = false;
-        this.spaceshipLeavingTriggered = false;
         this.alienKillTriggered = false;
 
         // Music
@@ -156,6 +154,9 @@ export class Game {
         // UDP → WebSocket bridge (only available when served via server.js)
         this.setupUDPBridge();
 
+        // Init Spaceship (Visible in IDLE, starts stationary)
+        this.spaceship = new Spaceship(this.app, this.gameContainer);
+
         // Game Loop
         this.app.ticker.add((delta) => this.gameLoop(delta));
     }
@@ -169,20 +170,11 @@ export class Game {
         this.bossDefeated = false;
         this.currentWaveIndex = -1;
         this.waveSpawnCount = 0;
-        this.spaceshipLeavingTriggered = false;
-        this.spaceshipAudioExiting = false;
         this.alienKillTriggered = false;
         this.score = 0;
 
-        // Clean up any remaining entities cleanly
-        while (this.shadowContainer.children.length > 0) {
-            this.shadowContainer.removeChildAt(0).destroy(true);
-        }
-        while (this.gameContainer.children.length > 0) {
-            this.gameContainer.removeChildAt(0).destroy(true);
-        }
+        this.clearEntities();
 
-        this.spaceship = null;
         this.pirates = [];
         this.explosions = [];
         this.clickEffects = [];
@@ -197,10 +189,11 @@ export class Game {
                 this.soundManager.playBackgroundMusic(resources.music, 0);
             }
             this.soundManager.startFootsteps();
-
-            // Spaceship audio starts at 0s:
-            this.soundManager.playSpaceship();
             this.soundManager.resetTimeline();
+        }
+
+        if (this.spaceship) {
+            this.spaceship.startHovering();
         }
 
         // Start Overlays
@@ -215,14 +208,12 @@ export class Game {
     returnToIdle() {
         this.gameState = 'IDLE';
 
-        while (this.shadowContainer.children.length > 0) {
-            this.shadowContainer.removeChildAt(0).destroy(true);
-        }
-        while (this.gameContainer.children.length > 0) {
-            this.gameContainer.removeChildAt(0).destroy(true);
+        this.clearEntities();
+
+        if (this.spaceship) {
+            this.spaceship.stopHovering();
         }
 
-        this.spaceship = null;
         this.pirates = [];
         this.explosions = [];
         this.clickEffects = [];
@@ -236,6 +227,22 @@ export class Game {
             this.overlaySprite.visible = true;
             this.overlaySprite.texture = resources.overlays[0]; // Reset to overlay_a
             this.resizeOverlay();
+        }
+    }
+
+    clearEntities() {
+        // Clean up shadow container
+        while (this.shadowContainer.children.length > 0) {
+            this.shadowContainer.removeChildAt(0).destroy(true);
+        }
+
+        // Clean up game container except spaceship
+        for (let i = this.gameContainer.children.length - 1; i >= 0; i--) {
+            const child = this.gameContainer.children[i];
+            if (this.spaceship && child === this.spaceship.sprite) {
+                continue;
+            }
+            child.destroy(true);
         }
     }
 
@@ -473,16 +480,15 @@ export class Game {
             this.countText.text = `Entities: ${this.pirates.length + this.explosions.length}`;
         }
 
+        if (this.spaceship) {
+            this.spaceship.update(delta);
+        }
+
         if (this.gameState === 'IDLE') {
             return;
         }
 
         this.gameTime = (now - this.gameStartTime) / 1000;
-
-        // Visual start (0.5s)
-        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_VISUAL_START && !this.spaceship) {
-            this.spaceship = new Spaceship(this.app, this.gameContainer);
-        }
 
         // Kill trigger (85s)
         if (this.gameTime >= CONFIG.TIMELINE.ALIEN_KILL_TRIGGER && !this.alienKillTriggered) {
@@ -491,6 +497,8 @@ export class Game {
 
             for (let i = this.pirates.length - 1; i >= 0; i--) {
                 const p = this.pirates[i];
+                // Only create explosion if we're not clearing the screen for other reasons?
+                // This is the timeline kill.
                 this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
                 p.destroy();
             }
@@ -506,25 +514,6 @@ export class Game {
             }
         }
 
-        // Spaceship exit audio (86s)
-        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_EXIT_AUDIO_START && !this.spaceshipAudioExiting) {
-            this.spaceshipAudioExiting = true;
-            if (this.soundManager) {
-                this.soundManager.playSpaceshipLeaving();
-            }
-        }
-
-        // Spaceship exit visual (87s)
-        if (this.gameTime >= CONFIG.TIMELINE.SPACESHIP_EXIT_VISUAL_START && this.spaceship && !this.spaceshipLeavingTriggered) {
-            this.spaceshipLeavingTriggered = true;
-            this.spaceship.state = 'leaving';
-
-            if (this.soundManager && !this.musicFadingOut) {
-                this.musicFadingOut = true;
-                this.soundManager.fadeOutMusic(3.0);
-            }
-        }
-
         // END GAME (90s)
         if (this.gameTime >= CONFIG.TIMELINE.GAME_END) {
             this.returnToIdle();
@@ -535,9 +524,7 @@ export class Game {
         this.spawnLogic(now);
         this.processInputs();
 
-        if (this.spaceship) {
-            this.spaceship.update(delta);
-        }
+
 
         // Pirates
         for (let i = this.pirates.length - 1; i >= 0; i--) {
