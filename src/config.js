@@ -3,7 +3,7 @@
 
 export const CONFIG = {
     // Spawning
-    SPAWN_RATE: 1000,           // Time in ms between spawns (decreases over time)
+    SPAWN_RATE: 800,           // Time in ms between spawns (decreases over time)
     SPAWN_MARGIN: 100,         // Safe zone margin (pixels) to keep pirates inside screen edge facing front
 
     // Gameplay & Interaction
@@ -27,7 +27,7 @@ export const CONFIG = {
     // Z-Depth Settings (Distance from Camera)
     Z_START: 1500,             // Starting distance (Spawn point) - Further away means smaller at spawn
     Z_SPEED: 5,                // Base movement speed towards camera
-    ALIEN_BASE_SIZE: 350,     // Base size for alien normalization (was 420)
+    ALIEN_BASE_SIZE: 300,     // Base size for alien normalization (was 420)
 
     // Fog / Atmosphere
     FOG: {
@@ -74,8 +74,9 @@ export const CONFIG = {
 
     BOSS: {
         HP: 20,
-        SCALE: 1.2,
-        HIT_BOUNCE: 1.2
+        SCALE: 1.6,
+        HIT_BOUNCE: 1.2,
+        Y_OFFSET: -50  // Moves the boss higher on the screen
     },
 
     // Audio & Ambiance
@@ -83,7 +84,8 @@ export const CONFIG = {
         MAX_FOOTSTEP_ALIENS: 30,       // Alien count at which footsteps reach max volume
         MAX_FOOTSTEP_VOLUME: 3.0,      // The max volume of the footprint footsteps
         GRUNT_CHANCE_PER_ALIEN: 0.0003, // Per-frame chance an alien will scream/grunt (adjust based on FPS)
-        SPEECH_VOLUME: 3.0             // Volume for scheduled speech clips (rex1-4)
+        SPEECH_VOLUME: 4.0,             // Volume for scheduled speech clips (rex1-4)
+        BGM_VOLUME: 0.8                // Background music volume (louder as requested)
     },
 
     // Overlays

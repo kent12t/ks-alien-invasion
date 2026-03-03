@@ -63,7 +63,7 @@ export class Pirate {
         this.worldX = this.baseWorldX; // Current X
 
         // Sticky Floor: World Y
-        this.worldY = CONFIG.FLOOR_Y;
+        this.worldY = this.isBoss ? (CONFIG.FLOOR_Y + (CONFIG.BOSS.Y_OFFSET || 0)) : CONFIG.FLOOR_Y;
 
         // Start far away
         this.z = CONFIG.Z_START;

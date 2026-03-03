@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 export default class SoundManager {
     constructor() {
         this.audioContext = null;
@@ -12,7 +14,7 @@ export default class SoundManager {
         // --- Volume Mixing Configuration ---
         this.volumes = {
             master: 1.0,
-            music: 0.2,
+            music: CONFIG.AUDIO.BGM_VOLUME || 0.2,
             sfx: 0.8
         };
 
