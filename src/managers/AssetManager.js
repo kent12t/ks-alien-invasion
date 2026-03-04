@@ -5,11 +5,16 @@ export const resources = {
     captainFrames: [],
     minionFrames: [],
     spaceshipFrames: [],
+    // Physics / Interaction
     parts: [],
+    // Overlays
+    overlays: [],
     // Static Fallback Textures
     ship: null,
     kraken: null,
     floor: null,
+    // Music
+    music: null,
     loaded: false
 };
 
@@ -44,6 +49,17 @@ export async function loadAssets() {
         const t = await PIXI.Texture.from(`assets/part${i}.png`);
         resources.parts.push(t);
     }
+
+    // 4. Overlays
+    for (const path of CONFIG.OVERLAYS.ASSETS) {
+        const t = await PIXI.Assets.load(path);
+        resources.overlays.push(t);
+    }
+
+    // 4. Music
+    resources.music = new Audio('assets/audio/bgm_edited90s.wav');
+    resources.music.loop = false;
+    resources.music.preload = 'metadata'; // Preload metadata so we can set currentTime
 
     resources.loaded = true;
 }

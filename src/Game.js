@@ -12,6 +12,7 @@ export class Game {
         this.shadowContainer = null;
         this.gameContainer = null;
         this.uiContainer = null;
+        this.overlayContainer = null;
 
         this.soundManager = null;
         this.spaceship = null;
@@ -21,13 +22,24 @@ export class Game {
         this.clickEffects = [];
         this.inputQueue = [];
 
+        this.gameState = 'IDLE';
         this.score = 0;
         this.lastSpawnTime = 0;
         this.gameStartTime = 0;
-        this.gameTime = 0; // Second counter
+        this.gameTime = -1; // Second counter
         this.currentWaveIndex = -1;
+        this.waveSpawnCount = 0;
         this.bossSpawned = false;
         this.bossDefeated = false;
+
+        this.alienKillTriggered = false;
+
+        // Music
+        this.musicStarted = false;
+        this.musicFadingOut = false;
+
+        // Frame guard: skip first frame to avoid accumulated delta from WebGL context loss
+        this.firstFrame = true;
 
         // Debug
         this.debugFPS = 60;
@@ -37,6 +49,9 @@ export class Game {
         this.countText = null;
 
         this.bgSprite = null;
+        this.overlaySprite = null;
+        this.currentOverlayIndex = 0;
+        this.nextOverlaySwapTime = 0;
     }
 
     async init() {
@@ -45,12 +60,18 @@ export class Game {
         // Create Pixi Application
         this.app = new PIXI.Application({
             view: canvasElement,
-            resizeTo: window,
+            resizeTo: document.getElementById('gameScreen'),
             backgroundColor: 0x000000, // Black
             antialias: true,
             autoDensity: true,
             resolution: window.devicePixelRatio || 1
         });
+
+        // Ensure touch-action is none to eliminate delay
+        canvasElement.style.touchAction = 'none';
+        canvasElement.style.userSelect = 'none';
+        canvasElement.style.webkitUserSelect = 'none';
+        canvasElement.style.webkitTouchCallout = 'none';
 
         // Create Layers
         this.shadowContainer = new PIXI.Container();
@@ -62,6 +83,9 @@ export class Game {
 
         this.uiContainer = new PIXI.Container();
         this.app.stage.addChild(this.uiContainer);
+
+        this.overlayContainer = new PIXI.Container();
+        this.app.stage.addChild(this.overlayContainer);
 
         // Loading Screen
         const loadingStyle = new PIXI.TextStyle({
@@ -82,14 +106,33 @@ export class Game {
         // Load Assets
         await loadAssets();
 
+        // Preload Audio Assets
+        const audioAssets = [
+            'assets/audio/RAAAW.aac',
+            'assets/audio/VRAAAGH.aac',
+            'assets/audio/YA-AA.aac',
+            'assets/audio/alien_death.aac',
+            'assets/audio/ckckck.aac',
+            'assets/audio/long_gurgles.aac',
+            'assets/audio/steps_v1.wav',
+            'assets/audio/laser.aac',
+            'assets/audio/spaceship.wav',
+            'assets/audio/rex1.mp3',
+            'assets/audio/rex2.mp3',
+            'assets/audio/rex3.mp3',
+            'assets/audio/rex4.mp3'
+        ];
+        if (this.soundManager) {
+            await this.soundManager.preloadAudio(audioAssets);
+        }
+
         // Start Game
         this.uiContainer.removeChild(loadingText);
         this.setupDebugUI();
         this.uiContainer.visible = false;
 
         // Init Game entities
-        this.gameStartTime = Date.now();
-        this.spaceship = new Spaceship(this.app, this.gameContainer);
+        this.gameState = 'IDLE';
 
         // Init BG
         if (resources.floor) {
@@ -99,8 +142,108 @@ export class Game {
             this.app.stage.addChildAt(this.bgSprite, 0);
         }
 
+        // Init Overlay
+        if (resources.overlays && resources.overlays.length > 0) {
+            this.overlaySprite = new PIXI.Sprite(resources.overlays[0]);
+            this.overlaySprite.anchor.set(0.5);
+            this.overlaySprite.visible = true;
+            this.resizeOverlay();
+            this.overlayContainer.addChild(this.overlaySprite);
+        }
+
+        // UDP → WebSocket bridge (only available when served via server.js)
+        this.setupUDPBridge();
+
+        // Init Spaceship (Visible in IDLE, starts stationary)
+        this.spaceship = new Spaceship(this.app, this.gameContainer);
+
         // Game Loop
         this.app.ticker.add((delta) => this.gameLoop(delta));
+    }
+
+    startGame() {
+        this.gameState = 'ACTIVE';
+        this.gameStartTime = Date.now();
+        this.gameTime = 0;
+
+        this.bossSpawned = false;
+        this.bossDefeated = false;
+        this.currentWaveIndex = -1;
+        this.waveSpawnCount = 0;
+        this.alienKillTriggered = false;
+        this.score = 0;
+
+        this.clearEntities();
+
+        this.pirates = [];
+        this.explosions = [];
+        this.clickEffects = [];
+        this.inputQueue = [];
+
+        // Restart audio
+        if (this.soundManager) {
+            this.soundManager.stopMusic();
+            this.musicStarted = true;
+            this.musicFadingOut = false;
+            if (resources.music) {
+                this.soundManager.playBackgroundMusic(resources.music, 0);
+            }
+            this.soundManager.startFootsteps();
+            this.soundManager.resetTimeline();
+        }
+
+        if (this.spaceship) {
+            this.spaceship.startHovering();
+        }
+
+        // Start Overlays
+        if (this.overlaySprite) {
+            this.overlaySprite.visible = true;
+            this.currentOverlayIndex = 0; // Starts at overlay_a
+            this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
+        }
+    }
+
+    returnToIdle() {
+        this.gameState = 'IDLE';
+
+        this.clearEntities();
+
+        if (this.spaceship) {
+            this.spaceship.stopHovering();
+        }
+
+        this.pirates = [];
+        this.explosions = [];
+        this.clickEffects = [];
+        this.inputQueue = [];
+
+        if (this.soundManager) {
+            this.soundManager.stopMusic();
+        }
+
+        if (this.overlaySprite) {
+            this.overlaySprite.visible = true;
+            this.currentOverlayIndex = 0;
+            this.overlaySprite.texture = resources.overlays[0]; // Reset to overlay_a
+            this.resizeOverlay();
+        }
+    }
+
+    clearEntities() {
+        // Clean up shadow container
+        while (this.shadowContainer.children.length > 0) {
+            this.shadowContainer.removeChildAt(0).destroy(true);
+        }
+
+        // Clean up game container except spaceship
+        for (let i = this.gameContainer.children.length - 1; i >= 0; i--) {
+            const child = this.gameContainer.children[i];
+            if (this.spaceship && child === this.spaceship.sprite) {
+                continue;
+            }
+            child.destroy(true);
+        }
     }
 
     resizeBackground() {
@@ -115,19 +258,95 @@ export class Game {
         this.bgSprite.y = sh / 2;
     }
 
+    resizeOverlay() {
+        if (!this.overlaySprite) return;
+        const sw = this.app.screen.width;
+        const sh = this.app.screen.height;
+        const tex = this.overlaySprite.texture;
+
+        const scale = Math.max(sw / tex.width, sh / tex.height);
+        this.overlaySprite.scale.set(scale);
+        this.overlaySprite.x = sw / 2;
+        this.overlaySprite.y = sh / 2;
+    }
+
     setupEventListeners() {
         const c = this.app.view;
-        c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+
+        // Track which pointers are currently held down so pointermove can fire as taps
+        this.activePointers = new Set();
+
+        // touchstart: preventDefault only — no queueing (avoids double input with pointerdown)
+        c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
+
         c.addEventListener('pointerdown', (e) => {
+            // Explicitly claim this pointer for this element to prevent browser gesture cancellation (like pinch-zoom)
+            if (c.setPointerCapture) {
+                c.setPointerCapture(e.pointerId);
+            }
+
             e.preventDefault();
-            this.inputQueue.push({ x: e.clientX, y: e.clientY });
-        }, { capture: true });
-        c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-        c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-        c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
+            // Coordinates relative to canvas so they stay correct with black-bar letterboxing
+            const rect = c.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Resume audio context synchronously (fire-and-forget) on every interaction
+            if (this.soundManager) {
+                this.soundManager.resumeAudioContext();
+            }
+
+            if (this.gameState === 'IDLE') {
+                return;
+            }
+
+            this.activePointers.add(e.pointerId);
+            this.inputQueue.push({ x, y });
+        }, { passive: false, capture: true });
+
+        // pointermove: every position update while a pointer is held = another tap
+        c.addEventListener('pointermove', (e) => {
+            if (!this.activePointers.has(e.pointerId)) return;
+            if (this.gameState !== 'ACTIVE') return;
+
+            const rect = c.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.inputQueue.push({ x, y });
+        }, { passive: true, capture: true });
+
+        // pointerup / pointercancel: stop treating this pointer as active
+        c.addEventListener('pointerup', (e) => {
+            if (c.releasePointerCapture) {
+                c.releasePointerCapture(e.pointerId);
+            }
+            this.activePointers.delete(e.pointerId);
+        }, { passive: true, capture: true });
+
+        c.addEventListener('pointercancel', (e) => {
+            if (c.releasePointerCapture) {
+                c.releasePointerCapture(e.pointerId);
+            }
+            this.activePointers.delete(e.pointerId);
+        }, { passive: true, capture: true });
+
+        c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false, capture: true });
+        c.addEventListener('touchend', (e) => e.preventDefault(), { passive: false, capture: true });
+        c.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false, capture: true });
+
+        // Block ctrl+scroll / trackpad pinch-to-zoom (fires as wheel with ctrlKey)
+        document.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) e.preventDefault();
+        }, { passive: false, capture: true });
+
+        // Block Safari native pinch-to-zoom (gesture events are Safari-only)
+        document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false, capture: true });
+        document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false, capture: true });
+        document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false, capture: true });
 
         window.addEventListener('resize', () => {
             if (this.bgSprite) this.resizeBackground();
+            this.resizeOverlay();
         });
 
         window.addEventListener('keydown', (e) => {
@@ -135,7 +354,92 @@ export class Game {
                 this.showDebug = !this.showDebug;
                 if (this.uiContainer) this.uiContainer.visible = this.showDebug;
             }
+            if (e.code === 'Space' && this.gameState === 'IDLE') {
+                // Resume audio context on user gesture
+                if (this.soundManager) {
+                    this.soundManager.resumeAudioContext();
+                }
+                this.startGame();
+            }
         });
+    }
+
+    /**
+     * Connects to the server's WebSocket endpoint and listens for UDP-triggered commands.
+     * Falls back silently when not running through server.js (e.g. raw file:// or plain http-server).
+     *
+     * Supported commands:
+     *   { command: "start" }  — start the game (same as clicking)
+     *   { command: "reset" }  — force return to IDLE
+     */
+    setupUDPBridge() {
+        // Only attempt when served over http/https (not file://)
+        if (!window.location.protocol.startsWith('http')) {
+            console.log('[UDP Bridge] Skipping — not running over HTTP.');
+            return;
+        }
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}`;
+
+        let reconnectDelay = 1000;
+        const maxDelay = 16000;
+
+        const connect = () => {
+            const ws = new WebSocket(wsUrl);
+
+            ws.addEventListener('open', () => {
+                console.log('[UDP Bridge] WebSocket connected to', wsUrl);
+                reconnectDelay = 1000; // reset back-off on success
+            });
+
+            ws.addEventListener('message', (event) => {
+                let payload;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch {
+                    console.warn('[UDP Bridge] Non-JSON message ignored:', event.data);
+                    return;
+                }
+
+                console.log('[UDP Bridge] Received command:', payload.command);
+
+                switch (payload.command) {
+                    case 'start':
+                        if (this.gameState === 'IDLE') {
+                            // Resume audio context (browsers require a user-gesture for audio;
+                            // the initial click to open the browser counts, so this should be fine)
+                            if (this.soundManager) {
+                                this.soundManager.resumeAudioContext();
+                            }
+                            this.startGame();
+                        } else {
+                            console.log('[UDP Bridge] "start" ignored — game is not IDLE (state:', this.gameState, ')');
+                        }
+                        break;
+
+                    case 'reset':
+                        this.returnToIdle();
+                        break;
+
+                    default:
+                        console.warn('[UDP Bridge] Unknown command:', payload.command);
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                console.log(`[UDP Bridge] WebSocket closed. Reconnecting in ${reconnectDelay}ms…`);
+                setTimeout(connect, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+            });
+
+            ws.addEventListener('error', (err) => {
+                // Error fires before close, so we just log it
+                console.warn('[UDP Bridge] WebSocket error (will reconnect):', err.type);
+            });
+        };
+
+        connect();
     }
 
     setupDebugUI() {
@@ -162,9 +466,16 @@ export class Game {
     }
 
     gameLoop(delta) {
-        const now = Date.now();
-        this.gameTime = (now - this.gameStartTime) / 1000;
+        // First frame guard: force normal delta to prevent fast-forward from WebGL context loss
+        if (this.firstFrame) {
+            this.firstFrame = false;
+            delta = 1.0;
+        }
 
+        // Clamp delta to prevent spikes during frame drops
+        delta = Math.min(delta, 3.0);
+
+        const now = Date.now();
         if (this.lastFrameTimeMs) {
             this.debugFPS = 1000 / (now - this.lastFrameTimeMs);
         }
@@ -175,26 +486,61 @@ export class Game {
             this.countText.text = `Entities: ${this.pirates.length + this.explosions.length}`;
         }
 
+        if (this.spaceship) {
+            this.spaceship.update(delta);
+        }
+
+        if (this.gameState === 'IDLE') {
+            return;
+        }
+
+        this.gameTime = (now - this.gameStartTime) / 1000;
+
+        // Kill trigger (85s)
+        if (this.gameTime >= CONFIG.TIMELINE.ALIEN_KILL_TRIGGER && !this.alienKillTriggered) {
+            this.alienKillTriggered = true;
+            const livingPirates = this.pirates.length;
+
+            for (let i = this.pirates.length - 1; i >= 0; i--) {
+                const p = this.pirates[i];
+
+                if (p.isBoss) {
+                    // Massive bombastic explosion for the Boss at the end
+                    const spriteCenterY = p.screenY - (200 * p.scale);
+                    for (let k = 0; k < 30; k++) {
+                        const ex = p.screenX + (Math.random() - 0.5) * 400 * p.scale;
+                        const ey = spriteCenterY + (Math.random() - 0.5) * 400 * p.scale;
+                        this.explosions.push(new Explosion(ex, ey, this.gameContainer));
+                    }
+                } else {
+                    this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
+                }
+
+                p.destroy();
+            }
+            this.pirates = [];
+
+            if (this.soundManager) {
+                if (livingPirates > 0) {
+                    this.soundManager.playExplosion();
+                    this.soundManager.playAlienDeath(0);
+                }
+                // Fully mute all alien related sounds (footsteps, grunts, death, etc.)
+                this.soundManager.muteAlienSounds();
+            }
+        }
+
+        // END GAME (90s)
+        if (this.gameTime >= CONFIG.TIMELINE.GAME_END) {
+            this.returnToIdle();
+            return;
+        }
+
         // Logic
         this.spawnLogic(now);
         this.processInputs();
 
-        // END GAME SEQUENCE (90s = 1m 30s)
-        if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
-            // Kill all existing minions/boss
-            for (let i = this.pirates.length - 1; i >= 0; i--) {
-                const p = this.pirates[i];
-                this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
-                p.destroy();
-            }
-            this.pirates = []; // Clear array
 
-            // Ship leaves
-            this.spaceship.state = 'leaving';
-        }
-
-        // Update Entities
-        this.spaceship.update(delta); // Or pass gameTime?
 
         // Pirates
         for (let i = this.pirates.length - 1; i >= 0; i--) {
@@ -218,6 +564,22 @@ export class Game {
             }
         }
 
+        // Alien Audio Ambiance & Footsteps
+        if (this.soundManager) {
+            // Update footstep intensity based on current numbers
+            this.soundManager.updateFootstepVolume(this.pirates.length, CONFIG.AUDIO.MAX_FOOTSTEP_ALIENS, CONFIG.AUDIO.MAX_FOOTSTEP_VOLUME);
+
+            // Randomly play grunts based on how many are on screen
+            if (this.pirates.length > 0 && Math.random() < (this.pirates.length * CONFIG.AUDIO.GRUNT_CHANCE_PER_ALIEN)) {
+                // Pick a random alien on screen to act as the "source" for panning
+                const p = this.pirates[Math.floor(Math.random() * this.pirates.length)];
+
+                // Calculate simple stereo pan based on screen position (-1 to 1)
+                const panX = (p.screenX / this.app.screen.width) * 2 - 1;
+                this.soundManager.playAlienGrunt(panX);
+            }
+        }
+
         // Click Effects
         for (let i = this.clickEffects.length - 1; i >= 0; i--) {
             const c = this.clickEffects[i];
@@ -227,63 +589,55 @@ export class Game {
             }
         }
 
+        // Timeline Sounds
+        if (this.soundManager) {
+            this.soundManager.updateTimeline(this.gameTime, CONFIG.SCHEDULED_SOUNDS, CONFIG.AUDIO.SPEECH_VOLUME);
+        }
 
+        // Update Overlays
+        this.updateOverlay(now);
     }
 
     spawnLogic(now) {
-        if (this.bossDefeated) return;
+        if (this.gameTime >= CONFIG.TIMELINE.ALIEN_SPAWN_END) return;
 
         // Wave Logic
         let currentWave = null;
+        let waveIndex = -1;
         for (let i = 0; i < CONFIG.WAVES.length; i++) {
             const w = CONFIG.WAVES[i];
             if (this.gameTime >= w.start && this.gameTime < w.end) {
                 currentWave = w;
-                this.currentWaveIndex = i;
+                waveIndex = i;
                 break;
             }
         }
 
         if (currentWave) {
+            // New Wave Transition
+            if (this.currentWaveIndex !== waveIndex) {
+                this.currentWaveIndex = waveIndex;
+                this.waveSpawnCount = 0;
+                this.lastSpawnTime = now; // Reset timer for the new wave
+            }
+
             // Check Boss
             if (currentWave.type === 'boss_wave' && !this.bossSpawned) {
                 this.bossSpawned = true;
                 const boss = new Pirate(this.app, this.gameContainer, this.shadowContainer, true);
                 this.pirates.push(boss);
-                // Spaceship STAYS until end
             }
 
-            // Minion Spawning
-            // If boss wave, we might still spawn minions? Original code didn't specify mixed.
-            // Let's assume spawn rate applies to minions always unless it's ONLY boss?
-            // "count: 30" -> Maybe limit?
+            // Dynamic Minion Spawning
+            const waveDuration = currentWave.end - currentWave.start;
+            const spawnInterval = (waveDuration * 1000) / currentWave.count;
 
-            // Simple timer based spawn
-            if (now - this.lastSpawnTime > CONFIG.SPAWN_RATE) {
+            if (now - this.lastSpawnTime > spawnInterval && this.waveSpawnCount < currentWave.count) {
                 this.lastSpawnTime = now;
-                // Don't spawn if only boss and boss is alive? 
-                // Original code was simpler, let's just stick to:
-
-                // If boss wave, maybe spawn minions too?
-                // Let's spawn minion if it's NOT just the boss instant.
-
                 const p = new Pirate(this.app, this.gameContainer, this.shadowContainer, false);
                 this.pirates.push(p);
+                this.waveSpawnCount++;
             }
-        }
-
-        // END GAME SEQUENCE (90s = 1m 30s)
-        if (this.gameTime >= 90 && this.spaceship && this.spaceship.state !== 'leaving') {
-            // Kill all existing minions/boss
-            for (let i = this.pirates.length - 1; i >= 0; i--) {
-                const p = this.pirates[i];
-                this.explosions.push(new Explosion(p.screenX, p.screenY, this.gameContainer));
-                p.destroy();
-            }
-            this.pirates = []; // Clear array
-
-            // Ship leaves
-            this.spaceship.state = 'leaving';
         }
     }
 
@@ -317,21 +671,11 @@ export class Game {
                     let killed = false;
                     if (p.isBoss) {
                         p.takeDamage();
+                        hitCount++; // Provide hit feedback/score
                         if (p.hp <= 0) {
-                            killed = true;
+                            // Boss HP is 0, but he should NOT die yet (killed = false)
+                            killed = false;
                             this.bossDefeated = true;
-                            // Boss Explosion - Massive Achievement Feeling
-                            // "bombastic" -> lots of explosions spread out
-                            for (let k = 0; k < 30; k++) {
-                                // Spread out more: +/- 200px
-                                const ex = p.screenX + (Math.random() - 0.5) * 400 * p.scale;
-                                const ey = spriteCenterY + (Math.random() - 0.5) * 400 * p.scale;
-                                // Delay some of them?
-                                // For now, simple immediate massive cluster.
-                                // We could add delay prop to Explosion? 
-                                // Or just spawn them all and let physics spread them.
-                                this.explosions.push(new Explosion(ex, ey, this.gameContainer));
-                            }
                         } else {
                             // Hit effect but not dead - "Bombastic" feedback
                             // Spawn 3-5 small explosions/sparks on hit
@@ -355,7 +699,27 @@ export class Game {
                 }
             }
 
-            if (hitCount > 0 && this.soundManager) this.soundManager.playExplosion();
+            if (hitCount > 0 && this.soundManager) {
+                this.soundManager.playExplosion();
+                this.soundManager.playAlienDeath((x / this.app.screen.width) * 2 - 1); // Pan based on click
+            }
+        }
+    }
+
+    updateOverlay(now) {
+        if (this.gameState !== 'ACTIVE' || !this.overlaySprite || resources.overlays.length === 0) return;
+
+        // Sequence through overlays A-L (indices 0-11)
+        // Interval is 90 / 12 = 7.5 seconds
+        const newIndex = Math.min(
+            resources.overlays.length - 1,
+            Math.floor(this.gameTime / CONFIG.OVERLAYS.SEQUENTIAL_INTERVAL)
+        );
+
+        if (newIndex !== this.currentOverlayIndex) {
+            this.currentOverlayIndex = newIndex;
+            this.overlaySprite.texture = resources.overlays[this.currentOverlayIndex];
+            this.resizeOverlay();
         }
     }
 }

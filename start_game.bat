@@ -1,26 +1,33 @@
 @echo off
 cd /d "%~dp0"
 title Alien Invasion Launcher
+
 echo ============================================
 echo      Starting Alien Invasion Server
 echo ============================================
 echo.
-echo Launching local web server via npx...
-echo The game should open in your default browser automatically.
-echo.
-echo If it asks to install http-server, press 'y' and Enter.
-echo.
 
-call npx http-server -c-1 -o
-
-if %ERRORLEVEL% NEQ 0 (
+:: Install ws dependency if missing (first run only)
+if not exist "node_modules\ws" (
+    echo [INFO] Installing dependencies...
+    call npm install
     echo.
-    echo [ERROR] npx failed to run. attempting python fallback...
-    python -m http.server 8080
-    if %ERRORLEVEL% NEQ 0 (
-        echo.
-        echo [ERROR] Could not start server. Please ensure Node.js or Python is installed.
-        pause
-    )
 )
+
+echo [INFO] Starting server...
+echo [INFO] Game URL : http://localhost:8080
+echo [INFO] UDP port : 41234
+echo.
+echo To trigger the game via UDP, run: send_udp_start.bat
+echo.
+echo Press Ctrl+C to stop the server.
+echo.
+
+:: Open browser after a short delay (1 second)
+start "" cmd /c "timeout /t 1 /nobreak >nul && start http://localhost:8080"
+
+node server.js
+
+echo.
+echo [INFO] Server stopped.
 pause

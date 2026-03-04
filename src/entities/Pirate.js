@@ -18,7 +18,7 @@ export class Pirate {
         // Shadow Setup (Back Layer)
         this.shadow = new PIXI.Graphics();
         this.shadow.beginFill(0x000000, 0.3); // Black, 30% opacity
-        this.shadow.drawEllipse(0, 0, 100, 30); // Base size oval
+        this.shadow.drawEllipse(0, 0, 60, 20); // Reduced from 100, 30
         this.shadow.endFill();
         shadowContainer.addChild(this.shadow); // Add to Shadow Layer
 
@@ -63,7 +63,7 @@ export class Pirate {
         this.worldX = this.baseWorldX; // Current X
 
         // Sticky Floor: World Y
-        this.worldY = CONFIG.FLOOR_Y;
+        this.worldY = this.isBoss ? (CONFIG.FLOOR_Y + (CONFIG.BOSS.Y_OFFSET || 0)) : CONFIG.FLOOR_Y;
 
         // Start far away
         this.z = CONFIG.Z_START;
@@ -150,8 +150,8 @@ export class Pirate {
 
         this.screenX = cx + this.worldX * this.scale;
 
-        // Shadow Y (Always on floor)
-        const shadowScreenY = cy + this.worldY * this.scale;
+        // Shadow Y (Always on floor, slightly elevated to meet the bottom of the and normalized sprites)
+        const shadowScreenY = cy + (this.worldY - 40) * this.scale;
 
         // Sprite Y (Affected by Jump)
         const effectiveWorldY = this.worldY - this.jumpY;
@@ -173,13 +173,22 @@ export class Pirate {
 
         // Normalize sprite texture size
         const tex = this.getCurrentTexture();
-        if (tex) {
+        if (tex && tex.baseTexture) {
             this.sprite.texture = tex;
             const w = tex.width || 1000;
             const h = tex.height || 1000;
-            const norm = 500 / Math.max(w, h);
+            const norm = CONFIG.ALIEN_BASE_SIZE / Math.max(w, h);
+            this.sprite.scale.set(this.scale * norm);
+        } else if (this.fallback && this.fallback.baseTexture) {
+            // Use fallback texture if valid
+            this.sprite.texture = this.fallback;
+            const w = this.fallback.width || 1000;
+            const h = this.fallback.height || 1000;
+            const norm = CONFIG.ALIEN_BASE_SIZE / Math.max(w, h);
             this.sprite.scale.set(this.scale * norm);
         } else {
+            // No valid texture – keep previous texture and log warning
+            console.warn('Pirate: No valid texture available for rendering');
             this.sprite.scale.set(this.scale * 0.5);
         }
 
@@ -247,15 +256,18 @@ export class Pirate {
     }
 
     takeDamage() {
-        this.hp--;
+        this.hp = Math.max(0, this.hp - 1);
     }
 
     getCurrentTexture() {
         if (this.frameCount > 0) {
             const idx = Math.floor(this.frameIndex);
-            if (this.frames[idx]) return this.frames[idx];
+            const tex = this.frames[idx];
+            if (tex && tex.baseTexture) return tex;
         }
-        return this.fallback;
+        // Return fallback only if it is a valid texture
+        if (this.fallback && this.fallback.baseTexture) return this.fallback;
+        return null;
     }
 
     destroy() {

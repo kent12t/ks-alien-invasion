@@ -17,105 +17,67 @@ export class Spaceship {
         this.animSpeed = 0.5; // 30fps
 
         // Pathing / State
-        this.state = 'entering'; // entering, idle, leaving
+        this.state = 'idle'; // Started as idle directly
+        this.isHovering = false; // Only hover when game starts
 
         // 3D World Coordinates
-        // Target: Center (0), High up?
-        // User said: "settled down in the center just behind the fog"
-        // Fog starts at CONFIG.FOG.START_Z (300).
-        // So target Z should be maybe 400?
-        this.targetZ = 450;
-
-        // Start: Camera side (Left).
-        // High Z (far) or Low Z (close)? "From camera side" implies close usually.
-        // Let's start "behind" or "next to" camera.
-        // Screen Left is -Width/2.
-        // Let's start at worldX = -2000 (way left), z = -200 (close).
-
-        this.worldX = -1500;
-        this.worldY = 0; // Center Y relative to horizon?
-        // Actually Pirate uses FLOOR_Y = 400.
-        // Spaceship should be flying. So worldY should be "up".
-        // If +y is down, negative worldY is up.
-        this.worldY = -300;
-
-        this.z = -200; // Start close
+        this.targetZ = CONFIG.SPACESHIP.TARGET_Z;
+        this.worldX = 0;
+        this.worldY = CONFIG.SPACESHIP.WORLD_Y;
+        this.z = this.targetZ;
 
         this.x = 0; // Screen X (calc in update)
         this.y = 0; // Screen Y (calc in update)
 
         // Entrance Props
-        this.entranceTimer = 0;
-        this.entranceDuration = 300; // 5 seconds @ 60fps
+        this.tick = 0;
+        this.frameIndex = 0;
+    }
+
+    startHovering() {
+        this.isHovering = true;
+    }
+
+    stopHovering() {
+        this.isHovering = false;
+        this.tick = 0;
+        this.worldX = 0;
+        this.worldY = CONFIG.SPACESHIP.WORLD_Y;
+        this.z = this.targetZ;
+        this.sprite.rotation = 0;
     }
 
     update(dt) {
         // Animation
         this.frameIndex += this.animSpeed * dt;
         if (this.frameIndex >= this.frameCount) this.frameIndex = 0;
-        this.sprite.texture = this.frames[Math.floor(this.frameIndex)] || this.frames[0];
+        // Ensure we have a valid texture before assigning to avoid null baseTexture errors
+        const nextTexture = this.frames[Math.floor(this.frameIndex)];
+        if (nextTexture && nextTexture.baseTexture) {
+            this.sprite.texture = nextTexture;
+        } else if (this.frames[0] && this.frames[0].baseTexture) {
+            this.sprite.texture = this.frames[0];
+        } else {
+            // Fallback: keep existing texture or assign a placeholder if needed
+            console.warn('Spaceship: No valid texture available for frame', this.frameIndex);
+        }
 
         // Logic
-        if (this.state === 'entering') {
-            this.entranceTimer += dt;
-            const t = Math.min(1, this.entranceTimer / this.entranceDuration);
-            // Ease out cubic
-            const ease = 1 - Math.pow(1 - t, 3);
-
-            // Move X from -1500 to 0
-            this.worldX = -1500 + (0 - (-1500)) * ease;
-
-            // Move Z from -200 to targetZ (450)
-            this.z = -200 + (this.targetZ - (-200)) * ease;
-
-            // DAMPENED WIGGLE: Amplitude fades to 0 as t approaches 1
-            const dampen = (1 - ease);
-
-            // Wiggle: "Goofy" side-to-side (Left to Right movement is linear, wiggle adds offsets)
-            // Left to Right is handled by worldX interpolation.
-            // Add extra sine wave oscillation on top for "drunk" looping feel.
-
-            // Y Wiggle: Up and down
-            this.worldY = -300 + Math.sin(this.entranceTimer * 0.1) * 80 * dampen;
-
-            // X Wiggle: Side to side (fading out)
-            this.worldX += Math.cos(this.entranceTimer * 0.15) * 40 * dampen;
-
-            // Rotation wiggle (fading out, reduced clamp)
-            // "dont roatate so much, a little is ok" -> reduced amplitude 0.2 -> 0.1
-            this.sprite.rotation = Math.sin(this.entranceTimer * 0.1) * 0.1 * dampen;
-
-            if (t >= 1) {
-                this.state = 'idle';
-                this.worldX = 0;
-                this.z = this.targetZ;
-                this.worldY = -300; // Reset Y to base hover Y
-                this.sprite.rotation = 0;
-
-                // Sync "tick" for idle hover so it doesn't jump
-                // Idle uses sin(tick * 0.05). 
-                // We want sin(tick * 0.05) to start near 0 (since worldY resets to -300).
-                // So tick should be 0 (phase 0) or PI (phase 0).
-                this.tick = 0;
-            }
-        } else if (this.state === 'idle') {
+        if (this.isHovering) {
             // Hover
-            this.tick = (this.tick || 0) + dt;
+            this.tick += dt;
             // Fade in the hover effect over first ~60 frames
             const fade = Math.min(1, this.tick / 60);
 
-            this.worldY = -300 + Math.sin(this.tick * 0.05) * 30 * fade; // Faster hover
+            this.worldY = CONFIG.SPACESHIP.WORLD_Y + Math.sin(this.tick * 0.05) * 30 * fade; // Faster hover
             this.z = this.targetZ; // Stay put
             this.sprite.rotation = Math.sin(this.tick * 0.02) * 0.05 * fade; // Slight idle tilt
-        } else if (this.state === 'leaving') {
-            // "It goes out from the right side, not the back."
-            // Move World X positive.
-            this.worldX += 20 * dt; // Fast exit right
-            // Maybe slight curve up?
-            this.worldY -= 2 * dt;
-
-            // Banking for turn
-            this.sprite.rotation = 0.2;
+        } else {
+            // Static idle
+            this.worldY = CONFIG.SPACESHIP.WORLD_Y;
+            this.z = this.targetZ;
+            this.worldX = 0;
+            this.sprite.rotation = 0;
         }
 
         // Projection (Same as Pirate)
@@ -132,7 +94,7 @@ export class Spaceship {
         this.sprite.y = this.y;
 
         // Base scale for spaceship? 0.8 in original
-        this.sprite.scale.set(scale * 1.5); // Make it big enough?
+        this.sprite.scale.set(scale * 0.4); // Make it big enough?
 
         // Depth Sorting
         this.sprite.zIndex = -this.z;

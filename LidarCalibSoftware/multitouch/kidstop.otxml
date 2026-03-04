@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+	<screen>
+		<type>0</type>
+		<uuid>ea68ecef-e0de-48c9-b1e6-ce3c82035b6f</uuid>
+		<name>New screen</name>
+		<size_mm_x>5500</size_mm_x>
+		<size_mm_y>1835</size_mm_y>
+		<offset_mm_x>0</offset_mm_x>
+		<offset_mm_y>0</offset_mm_y>
+		<margin>50</margin>
+	</screen>
+	<device>
+		<type>1</type>
+		<uuid>b55f3b9e-b5ea-448c-9be9-f533402d6ca5</uuid>
+		<name>New device</name>
+		<connection_type>0</connection_type>
+		<network_host>127.0.0.1</network_host>
+		<network_port>10942</network_port>
+		<offset_mm_x>400</offset_mm_x>
+		<offset_mm_y>2820</offset_mm_y>
+		<rotation>0</rotation>
+		<screen>ea68ecef-e0de-48c9-b1e6-ce3c82035b6f</screen>
+		<filter_jitter_radius>45</filter_jitter_radius>
+		<filter_prediction>0.5</filter_prediction>
+		<flip_x>false</flip_x>
+		<flip_y>true</flip_y>
+		<max_touch_deviation>50</max_touch_deviation>
+		<min_touch_segments>1</min_touch_segments>
+		<min_touch_age>1</min_touch_age>
+		<linear_regression>1</linear_regression>
+		<interpolate_invalid_enabled>false</interpolate_invalid_enabled>
+		<bilateral_filter_enabled>false</bilateral_filter_enabled>
+		<shadow_filter_enabled>true</shadow_filter_enabled>
+		<shadow_filter_min_angle>40</shadow_filter_min_angle>
+		<shadow_filter_max_angle>130</shadow_filter_max_angle>
+		<shadow_filter_window>1</shadow_filter_window>
+		<shadow_filter_neighbors>1</shadow_filter_neighbors>
+		<angle_start>-1</angle_start>
+		<angle_end>-1</angle_end>
+	</device>
+	<area>
+		<uuid>378fda0b-e487-4d66-b00d-75a83111ae98</uuid>
+		<screen>ea68ecef-e0de-48c9-b1e6-ce3c82035b6f</screen>
+		<type>0</type>
+		<size_mm_x>4670</size_mm_x>
+		<size_mm_y>1835</size_mm_y>
+		<offset_mm_x>380</offset_mm_x>
+		<offset_mm_y>0</offset_mm_y>
+	</area>
+	<output>
+		<type>3</type>
+		<name>New output</name>
+		<screen_all>true</screen_all>
+		<offset_px_x>0</offset_px_x>
+		<offset_px_y>0</offset_px_y>
+		<size_px_x>1920</size_px_x>
+		<size_px_y>1080</size_px_y>
+		<mode>0</mode>
+		<use_incontact>true</use_incontact>
+		<pointer_type>2</pointer_type>
+		<pressure>0</pressure>
+		<radius_px>25</radius_px>
+	</output>
+	<tuio>
+		<cursor>
+			<base>83472</base>
+			<max>100</max>
+		</cursor>
+	</tuio>
+	<touch>
+		<track_max_dist>400</track_max_dist>
+		<merge_dist>80</merge_dist>
+	</touch>
+</config>
