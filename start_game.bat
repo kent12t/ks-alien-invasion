@@ -16,6 +16,9 @@ echo [INFO] Checking for updates...
 git pull origin main
 echo.
 
+@echo off
+start "" /min "C:\Users\Off the Beaten Track\Documents\GitHub\ks-alien-invasion\LidarCalibSoftware\multitouch\server.exe" "C:\Users\Off the Beaten Track\Documents\GitHub\ks-alien-invasion\LidarCalibSoftware\multitouch\kidstop.otxml"
+
 :: Install ws dependency if missing (first run only)
 if not exist "node_modules\ws" (
     echo [INFO] Installing dependencies...
