@@ -20,7 +20,7 @@ Alien Invasion is an interactive browser-based game designed for **Hokuyo LIDAR*
    npm start
    # or run start_game.bat
    ```
-   The game will be available at [http://localhost:8080](http://localhost:8080).
+   The game will be available at [http://localhost:3000](http://localhost:3000).
 
 3. **Trigger Start via UDP**:
    Send a "start" string to UDP port `41234`.

@@ -1,8 +1,8 @@
 /**
  * Alien Invasion - Combined HTTP + WebSocket + UDP Server
  *
- * - Serves static game files over HTTP (port 8080)
- * - Exposes a WebSocket endpoint at ws://localhost:8080 for the browser
+ * - Serves static game files over HTTP (port 3000)
+ * - Exposes a WebSocket endpoint at ws://localhost:3000 for the browser
  * - Listens for UDP packets on port 41234 (configurable via UDP_PORT env var)
  *
  * UDP trigger format (plain text, UTF-8):
@@ -25,7 +25,7 @@ const dgram = require('dgram');
 const { WebSocketServer } = require('ws');
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-const HTTP_PORT = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT) : 8080;
+const HTTP_PORT = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT) : 3000;
 const UDP_PORT = process.env.UDP_PORT ? parseInt(process.env.UDP_PORT) : 41234;
 const SERVE_DIR = __dirname; // Serve files from project root
 
