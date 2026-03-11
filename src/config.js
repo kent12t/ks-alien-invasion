@@ -22,12 +22,12 @@ export const CONFIG = {
     MIN_SCALE: 0.1,            // Minimum size scale for objects far away
 
     // World Dimensions (World Units)
-    FLOOR_Y: 250,              // Vertical position of the floor (relative to center)
+    FLOOR_Y: 350,              // Vertical position of the floor (Lowered from 250)
 
     // Z-Depth Settings (Distance from Camera)
     Z_START: 1500,             // Starting distance (Spawn point) - Further away means smaller at spawn
     Z_SPEED: 5,                // Base movement speed towards camera
-    ALIEN_BASE_SIZE: 300,     // Base size for alien normalization (was 420)
+    ALIEN_BASE_SIZE: 450,     // Base size for alien normalization (Increased by 0.5 scale equivalent)
 
     // Fog / Atmosphere
     FOG: {
@@ -74,7 +74,7 @@ export const CONFIG = {
 
     BOSS: {
         HP: 20,
-        SCALE: 1.6,
+        SCALE: 2.1,
         HIT_BOUNCE: 1.2,
         Y_OFFSET: -50  // Moves the boss higher on the screen
     },
@@ -112,6 +112,6 @@ export const CONFIG = {
     SPACESHIP: {
         WORLD_Y: -100,                 // Lowered from -300 to be closer to the action
         TARGET_Z: 450,
-        SCALE: 0.6                     // Increased from ~0.4 for better visibility
+        SCALE: 1.1                     // Increased from 0.6 by 0.5 points
     }
 };
