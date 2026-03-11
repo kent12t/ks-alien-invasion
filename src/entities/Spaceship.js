@@ -93,8 +93,8 @@ export class Spaceship {
         this.sprite.x = this.x;
         this.sprite.y = this.y;
 
-        // Base scale for spaceship? 0.8 in original
-        this.sprite.scale.set(scale * 0.4); // Make it big enough?
+        // Base scale for spaceship
+        this.sprite.scale.set(scale * CONFIG.SPACESHIP.SCALE);
 
         // Depth Sorting
         this.sprite.zIndex = -this.z;
