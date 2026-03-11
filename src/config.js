@@ -111,6 +111,7 @@ export const CONFIG = {
     // Spaceship Props
     SPACESHIP: {
         WORLD_Y: -100,                 // Lowered from -300 to be closer to the action
-        TARGET_Z: 450
+        TARGET_Z: 450,
+        SCALE: 0.5                     // Increased from ~0.4 for better visibility
     }
 };
