@@ -132,7 +132,15 @@ udpServer.on('message', (msg, rinfo) => {
 
     switch (raw) {
         case 'start':
+        case '0':
             broadcast({ command: 'start' });
+            break;
+        case 'pause':
+            broadcast({ command: 'pause' });
+            break;
+        case 'end':
+        case '9':
+            broadcast({ command: 'end' });
             break;
         case 'reset':
             broadcast({ command: 'reset' });

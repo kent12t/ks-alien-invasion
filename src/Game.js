@@ -34,6 +34,9 @@ export class Game {
 
         this.alienKillTriggered = false;
 
+        // Pause / scrub
+        this.pausedAtGameTime = 0; // gameTime value frozen when paused
+
         // Music
         this.musicStarted = false;
         this.musicFadingOut = false;
@@ -276,6 +279,27 @@ export class Game {
         // Track which pointers are currently held down so pointermove can fire as taps
         this.activePointers = new Set();
 
+        // ── One-shot HTML <audio> unlock ──────────────────────────────────────
+        // The browser's autoplay policy gates HTML audio independently from the
+        // Web Audio API.  We need to call .play() from inside a genuine user-
+        // gesture handler at least once to "unlock" the element, after which it
+        // can be played freely (including from UDP-triggered code paths).
+        let musicUnlocked = false;
+        const unlockMusic = () => {
+            if (musicUnlocked || !resources.music) return;
+            musicUnlocked = true;
+            // Silent play → immediate pause convinces the browser the element is
+            // user-approved for the rest of this page session.
+            const p = resources.music.play();
+            if (p !== undefined) {
+                p.then(() => {
+                    resources.music.pause();
+                    resources.music.currentTime = 0;
+                }).catch(() => { /* still blocked — user hasn't interacted enough yet */ });
+            }
+        };
+        // ─────────────────────────────────────────────────────────────────────
+
         // touchstart: preventDefault only — no queueing (avoids double input with pointerdown)
         c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
 
@@ -295,6 +319,8 @@ export class Game {
             if (this.soundManager) {
                 this.soundManager.resumeAudioContext();
             }
+            // Unlock HTML <audio> element on first real touch/click
+            unlockMusic();
 
             if (this.gameState === 'IDLE') {
                 return;
@@ -350,16 +376,37 @@ export class Game {
         });
 
         window.addEventListener('keydown', (e) => {
+            // Unlock HTML <audio> on first keyboard interaction (same gesture gate as pointerdown)
+            unlockMusic();
+
+            // Debug toggle
             if (e.key === '1') {
                 this.showDebug = !this.showDebug;
                 if (this.uiContainer) this.uiContainer.visible = this.showDebug;
             }
-            if (e.code === 'Space' && this.gameState === 'IDLE') {
-                // Resume audio context on user gesture
-                if (this.soundManager) {
-                    this.soundManager.resumeAudioContext();
+
+            // Space: start from IDLE, or toggle pause during play
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (this.soundManager) this.soundManager.resumeAudioContext();
+                if (this.gameState === 'IDLE') {
+                    this.startGame();
+                } else if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                    this.togglePause();
                 }
+                return;
+            }
+
+            // 0 = start (IDLE only)
+            if (e.key === '0' && this.gameState === 'IDLE') {
+                if (this.soundManager) this.soundManager.resumeAudioContext();
                 this.startGame();
+                return;
+            }
+
+            // 9 = skip to end / trigger kill-all and return to IDLE
+            if (e.key === '9' && (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED')) {
+                this.endGame();
             }
         });
     }
@@ -406,15 +453,31 @@ export class Game {
 
                 switch (payload.command) {
                     case 'start':
+                    case '0':
+                        // '0' and 'start' both start the game from IDLE
                         if (this.gameState === 'IDLE') {
-                            // Resume audio context (browsers require a user-gesture for audio;
-                            // the initial click to open the browser counts, so this should be fine)
-                            if (this.soundManager) {
-                                this.soundManager.resumeAudioContext();
-                            }
+                            if (this.soundManager) this.soundManager.resumeAudioContext();
                             this.startGame();
                         } else {
                             console.log('[UDP Bridge] "start" ignored — game is not IDLE (state:', this.gameState, ')');
+                        }
+                        break;
+
+                    case 'pause':
+                        // Toggle pause/resume; also starts from IDLE
+                        if (this.soundManager) this.soundManager.resumeAudioContext();
+                        if (this.gameState === 'IDLE') {
+                            this.startGame();
+                        } else if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                            this.togglePause();
+                        }
+                        break;
+
+                    case 'end':
+                    case '9':
+                        // Skip to end / trigger kill-all
+                        if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                            this.endGame();
                         }
                         break;
 
@@ -440,6 +503,49 @@ export class Game {
         };
 
         connect();
+    }
+
+    /**
+     * Toggles between ACTIVE and PAUSED.
+     * While paused the game loop skips all simulation updates so the scene freezes.
+     */
+    togglePause() {
+        if (this.gameState === 'ACTIVE') {
+            this.pausedAtGameTime = this.gameTime;
+            this.gameState = 'PAUSED';
+            // Freeze audio exactly where it is
+            if (this.soundManager) this.soundManager.pauseMusic();
+            console.log(`[Game] Paused at ${this.pausedAtGameTime.toFixed(2)}s`);
+        } else if (this.gameState === 'PAUSED') {
+            // Shift gameStartTime so the clock continues from pausedAtGameTime
+            this.gameStartTime = Date.now() - this.pausedAtGameTime * 1000;
+            this.gameState = 'ACTIVE';
+            // Resume audio from the exact position it was frozen at
+            if (this.soundManager) this.soundManager.resumeMusic();
+            console.log(`[Game] Resumed from ${this.pausedAtGameTime.toFixed(2)}s`);
+        }
+    }
+
+    /**
+     * Immediately triggers the kill-all sequence (same as reaching 85s) and
+     * then returns to IDLE after the short explosion window.
+     * Bound to keyboard key '9' and UDP commands 'end' / '9'.
+     */
+    endGame() {
+        if (this.gameState === 'PAUSED') {
+            // Unfreeze first so entities are visible for explosions
+            this.gameStartTime = Date.now() - this.pausedAtGameTime * 1000;
+            this.gameState = 'ACTIVE';
+        }
+
+        // Fast-forward the clock past ALIEN_KILL_TRIGGER so the existing kill
+        // logic fires naturally on the very next game-loop tick.
+        const killTime = CONFIG.TIMELINE.ALIEN_KILL_TRIGGER;
+        this.gameStartTime = Date.now() - killTime * 1000;
+        this.gameTime = killTime;
+        this.alienKillTriggered = false; // Re-arm so the trigger fires
+
+        console.log('[Game] endGame() — forcing kill-all sequence');
     }
 
     setupDebugUI() {
@@ -490,7 +596,8 @@ export class Game {
             this.spaceship.update(delta);
         }
 
-        if (this.gameState === 'IDLE') {
+        // Both IDLE and PAUSED skip all simulation logic
+        if (this.gameState === 'IDLE' || this.gameState === 'PAUSED') {
             return;
         }
 

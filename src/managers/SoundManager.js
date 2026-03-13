@@ -378,6 +378,35 @@ export default class SoundManager {
         }
     }
 
+    /** Freeze the music exactly where it is (for pause). */
+    pauseMusic() {
+        this.musicFading = false;
+        if (this.backgroundMusic && !this.backgroundMusic.paused) {
+            this.backgroundMusic.pause();
+        }
+        if (this.footstepSource) {
+            // Silence footsteps but keep source alive so they restart on resume
+            this.footstepGain.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.05);
+        }
+    }
+
+    /** Resume from where pauseMusic() left off. */
+    resumeMusic() {
+        if (!this.backgroundMusic) return;
+        const playPromise = this.backgroundMusic.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(() => {/* silently ignore if still blocked */});
+        }
+        // Restore footstep gain — the normal updateFootstepVolume will take over next frame
+        if (this.footstepGain && this.audioContext) {
+            this.footstepGain.gain.setTargetAtTime(
+                this.volumes.sfx,
+                this.audioContext.currentTime,
+                0.2
+            );
+        }
+    }
+
     // ----- Alien Audio Control -----
     muteAlienSounds() {
         if (!this.audioContext) return;

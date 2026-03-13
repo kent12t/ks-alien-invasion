@@ -59,7 +59,7 @@ export async function loadAssets() {
     // 4. Music
     resources.music = new Audio('assets/audio/bgm_edited90s.wav');
     resources.music.loop = false;
-    resources.music.preload = 'metadata'; // Preload metadata so we can set currentTime
+    resources.music.preload = 'auto'; // Fully buffer the file so currentTime seek is instant
 
     resources.loaded = true;
 }
