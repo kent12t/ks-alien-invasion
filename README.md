@@ -22,11 +22,12 @@ Alien Invasion is an interactive browser-based game designed for **Hokuyo LIDAR*
    ```
    The game will be available at [http://localhost:3000](http://localhost:3000).
 
-3. **Trigger Start via UDP**:
-   Send a "start" string to UDP port `41234`.
+3. **Trigger Commands via UDP**:
+   Send plain text strings to UDP port `41234`.
    ```bash
    ./send_udp_start.bat
    ```
+   *Supported Commands:* `start`, `pause`, `end`, `9`.
 
 ---
 
@@ -43,11 +44,27 @@ The project consists of a high-performance frontend engine and a Node.js utility
 | **Browser**     | Fires `pointerdown` events to the game canvas.               |
 | **Game Engine** | Queues inputs and processes them at the start of each frame. |
 
-### 2. UDP Trigger System
-A separate control path allows external hardware or scripts to control game state:
-- **UDP Port 41234** listens for `start` or `reset`.
-- **Server** broadcasts commands to all connected browsers via **WebSockets**.
-- **Game** reacts immediately (e.g., transitioning from IDLE to ACTIVE).
+### 2. Remote Control System (UDP & WS)
+A control path allows external hardware or scripts to control the game state:
+- **UDP Port 41234** listens for triggers (see commands below).
+- **Server** broadcasts these commands to all connected browsers via **WebSockets**.
+- **Game Engine** implements a **State Controller** that handles transitions, timeline jumps, and simulation pausing.
+
+---
+
+## 🎮 Controls & State Management
+
+| Action               | Keyboard                 | UDP Command |
+| :------------------- | :----------------------- | :---------- |
+| **Start Game**       | `Space` (when IDLE)      | `start`     |
+| **Pause / Resume**   | `Space` (during play)    | `pause`     |
+| **End Game / Reset** | `9` (during play/paused) | `end`       |
+| **Toggle Debug**     | `1`                      | —           |
+
+### Game State Controller
+- **Pause/Resume**: Freezes the simulation and the game clock. HTML Audio is synced precisely to pause and resume from the exact same timestamp.
+- **Immediate End**: The `9` command fast-forwards the clock to the absolute end (93s), triggering alien explosions and immediately returning to the IDLE screen.
+- **Audio Unlocking**: Implements a one-shot "user-gesture" unlock for HTML Audio on the first interaction, ensuring UDP-triggered music playback works reliably in commercial/kiosk browsers.
 
 ---
 

@@ -23,11 +23,15 @@ export default class SoundManager {
         this.footstepGain = null; // Dedicated bus for footsteps
         // We'll also keep a reference to the footstep source for possible stop
         this.footstepSource = null;
+        this.musicSource = null; // Track Web Audio music source
+        this.musicGain = null;   // Dedicated gain for BGM
         // Flag to mute all alien related sounds (death, grunts, footsteps)
         this.alienMuted = false;
         this.explosionNoiseBuffer = null;
+        this.activeSources = new Set(); // Track playing sources for emergency stop
         this.audioBuffers = {}; // Map of preloaded audio buffers
         this.timelineEvents = new Set(); // Track played scheduled events
+        this.manualPause = false; // Flag to prevent context resume during game pause
 
         if (this.audioContext) {
             // Setup master and sfx busses
@@ -42,6 +46,13 @@ export default class SoundManager {
             this.footstepGain = this.audioContext.createGain();
             this.footstepGain.gain.value = 0; // Starts silent
             this.footstepGain.connect(this.sfxGain);
+
+            this.alienGain = this.audioContext.createGain();
+            this.alienGain.connect(this.sfxGain);
+
+            this.musicGain = this.audioContext.createGain();
+            this.musicGain.gain.value = this.volumes.music;
+            this.musicGain.connect(this.masterGain);
 
             // Pre-generate noise buffer for explosions to save CPU
             this.explosionNoiseBuffer = this.createNoiseBuffer(0.7); // max duration
@@ -107,6 +118,11 @@ export default class SoundManager {
 
         lastNode.connect(this.sfxGain);
         source.start(0);
+
+        // Track source so we can force-stop it on game end
+        this.activeSources.add(source);
+        source.onended = () => this.activeSources.delete(source);
+
         return source;
     }
 
@@ -180,6 +196,20 @@ export default class SoundManager {
         this.alienMuted = false;
     }
 
+    /**
+     * Marks all scheduled events before the given time as "played" so they don't
+     * all trigger at once when the game clock jumps forward (scrubbing/ending).
+     */
+    skipTimelineTo(gameTime, scheduledSounds = {}) {
+        if (!this.audioContext) return;
+        for (const timeStr of Object.keys(scheduledSounds)) {
+            const triggerTime = parseFloat(timeStr);
+            if (gameTime >= triggerTime) {
+                this.timelineEvents.add(timeStr);
+            }
+        }
+    }
+
     // Update mixing volume dynamically
     setVolume(type, value) {
         if (this.volumes[type] !== undefined) {
@@ -193,13 +223,14 @@ export default class SoundManager {
                 }
             } else if (type === 'sfx' && this.sfxGain) {
                 this.sfxGain.gain.setValueAtTime(this.volumes.sfx, t);
-            } else if (type === 'music' && this.backgroundMusic && !this.musicFading) {
-                this.backgroundMusic.volume = this.volumes.music * this.volumes.master;
+            } else if (type === 'music' && this.musicGain) {
+                this.musicGain.gain.setValueAtTime(this.volumes.music, t);
             }
         }
     }
 
     resumeAudioContext() {
+        if (this.manualPause) return;
         if (this.audioContext && this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
@@ -301,80 +332,108 @@ export default class SoundManager {
         }
     }
 
-    playBackgroundMusic(musicAudio, startTime = 65) {
-        if (!musicAudio) return;
-        this.backgroundMusic = musicAudio;
-        this.backgroundMusic.volume = 0;
-        this.backgroundMusic.currentTime = startTime;
+    playBackgroundMusic(assetName, startTime = 0) {
+        if (!this.audioContext || !this.audioBuffers[assetName]) return;
 
-        // Called from user gesture handler, so play() is allowed by browser
-        const playPromise = this.backgroundMusic.play();
-        if (playPromise !== undefined) {
-            playPromise.then(() => {
-                this.fadeInMusic(2.0); // 2 second fade in
-            }).catch(() => {
-                // Silently handle if playback still blocked
-            });
+        // Stop existing if any
+        if (this.musicSource) {
+            try { this.musicSource.stop(); } catch (e) {}
         }
+
+        this.musicSource = this.audioContext.createBufferSource();
+        this.musicSource.buffer = this.audioBuffers[assetName];
+        this.musicSource.loop = false;
+        this.musicSource.connect(this.musicGain);
+
+        // Calculate offset if we ever need it (e.g. scrubbing), though usually 0
+        this.musicSource.start(0, startTime);
+
+        this.fadeInMusic(2.0);
     }
 
     fadeInMusic(duration = 2.0) {
-        if (!this.backgroundMusic) return;
+        if (!this.musicGain || !this.audioContext) return;
         this.musicFading = true;
-        // Adjust start according to global music/master volume
-        const startVolume = 0;
-        const endVolume = this.volumes.music * this.volumes.master;
-        const startTime = Date.now();
+        const now = this.audioContext.currentTime;
+        const targetVol = this.volumes.music;
 
-        const fade = () => {
-            if (!this.backgroundMusic || !this.musicFading) return;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const progress = Math.min(elapsed / duration, 1.0);
-            this.backgroundMusic.volume = startVolume + (endVolume - startVolume) * progress;
+        this.musicGain.gain.cancelScheduledValues(now);
+        this.musicGain.gain.setValueAtTime(0, now);
+        this.musicGain.gain.linearRampToValueAtTime(targetVol, now + duration);
 
-            if (progress < 1.0) {
-                requestAnimationFrame(fade);
-            } else {
-                this.musicFading = false;
-            }
-        };
-        fade();
+        setTimeout(() => { this.musicFading = false; }, duration * 1000);
     }
 
     fadeOutMusic(duration = 2.0) {
-        if (!this.backgroundMusic) return;
+        if (!this.musicGain || !this.audioContext) return;
         this.musicFading = true;
-        const startVolume = this.backgroundMusic.volume;
-        const endVolume = 0;
-        const startTime = Date.now();
+        const now = this.audioContext.currentTime;
 
-        const fade = () => {
-            if (!this.backgroundMusic) return;
-            const elapsed = (Date.now() - startTime) / 1000;
-            const progress = Math.min(elapsed / duration, 1.0);
-            this.backgroundMusic.volume = startVolume + (endVolume - startVolume) * progress;
+        this.musicGain.gain.cancelScheduledValues(now);
+        this.musicGain.gain.linearRampToValueAtTime(0.01, now + duration);
 
-            if (progress < 1.0) {
-                requestAnimationFrame(fade);
-            } else {
-                this.musicFading = false;
-                if (this.backgroundMusic) {
-                    this.backgroundMusic.pause();
-                }
+        setTimeout(() => {
+            this.musicFading = false;
+            if (this.musicSource) {
+                try { this.musicSource.stop(); } catch (e) {}
+                this.musicSource = null;
             }
-        };
-        fade();
+        }, duration * 1000);
     }
 
     stopMusic() {
-        if (this.backgroundMusic) {
-            this.musicFading = false;
-            this.backgroundMusic.pause();
-            this.backgroundMusic.currentTime = 0;
+        this.manualPause = false;
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
         }
+
+        // Force stop all one-shot SFX immediately
+        for (const source of this.activeSources) {
+            try { source.stop(); } catch (e) {}
+        }
+        this.activeSources.clear();
+
+        if (this.musicSource) {
+            try { this.musicSource.stop(); } catch (e) {}
+            this.musicSource = null;
+        }
+
         if (this.footstepSource) {
-            this.footstepSource.stop();
+            try { this.footstepSource.stop(); } catch (e) { /* ignore */ }
             this.footstepSource = null;
+        }
+    }
+
+    /** Freeze the music exactly where it is (for pause). */
+    pauseMusic() {
+        this.musicFading = false;
+        // BGM is now part of AudioContext, so audioContext.suspend() handles it.
+
+        if (this.audioContext) {
+            this.manualPause = true;
+            this.audioContext.suspend();
+        }
+
+        if (this.footstepSource) {
+            // Silence footsteps
+            this.footstepGain.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.05);
+        }
+    }
+
+    /** Resume from where pauseMusic() left off. */
+    resumeMusic() {
+        if (this.audioContext) {
+            this.manualPause = false;
+            this.audioContext.resume();
+        }
+
+        // Restore footstep gain — the normal updateFootstepVolume will take over next frame
+        if (this.footstepGain && this.audioContext) {
+            this.footstepGain.gain.setTargetAtTime(
+                this.volumes.sfx,
+                this.audioContext.currentTime,
+                0.2
+            );
         }
     }
 
@@ -386,6 +445,10 @@ export default class SoundManager {
         // Mute footstep gain immediately
         if (this.footstepGain) {
             this.footstepGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+        }
+        // Mute alien grunt/death bus immediately
+        if (this.alienGain) {
+            this.alienGain.gain.setValueAtTime(0, this.audioContext.currentTime);
         }
         // Stop footstep source if running
         if (this.footstepSource) {

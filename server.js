@@ -134,8 +134,11 @@ udpServer.on('message', (msg, rinfo) => {
         case 'start':
             broadcast({ command: 'start' });
             break;
-        case 'reset':
-            broadcast({ command: 'reset' });
+        case 'pause':
+            broadcast({ command: 'pause' });
+            break;
+        case 'end':
+            broadcast({ command: 'end' });
             break;
         default:
             console.log(`[UDP] Unknown command: "${raw}" — ignored.`);

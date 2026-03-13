@@ -34,6 +34,9 @@ export class Game {
 
         this.alienKillTriggered = false;
 
+        // Pause / scrub
+        this.pausedAtGameTime = 0; // gameTime value frozen when paused
+
         // Music
         this.musicStarted = false;
         this.musicFadingOut = false;
@@ -47,6 +50,7 @@ export class Game {
         this.showDebug = false;
         this.fpsText = null;
         this.countText = null;
+        this.pauseUI = null;
 
         this.bgSprite = null;
         this.overlaySprite = null;
@@ -120,7 +124,8 @@ export class Game {
             'assets/audio/rex1.mp3',
             'assets/audio/rex2.mp3',
             'assets/audio/rex3.mp3',
-            'assets/audio/rex4.mp3'
+            'assets/audio/rex4.mp3',
+            'assets/audio/bgm_edited90s.wav'
         ];
         if (this.soundManager) {
             await this.soundManager.preloadAudio(audioAssets);
@@ -129,6 +134,7 @@ export class Game {
         // Start Game
         this.uiContainer.removeChild(loadingText);
         this.setupDebugUI();
+        this.setupGameUI();
         this.uiContainer.visible = false;
 
         // Init Game entities
@@ -163,6 +169,7 @@ export class Game {
 
     startGame() {
         this.gameState = 'ACTIVE';
+        if (this.pauseUI) this.pauseUI.visible = false;
         this.gameStartTime = Date.now();
         this.gameTime = 0;
 
@@ -185,9 +192,7 @@ export class Game {
             this.soundManager.stopMusic();
             this.musicStarted = true;
             this.musicFadingOut = false;
-            if (resources.music) {
-                this.soundManager.playBackgroundMusic(resources.music, 0);
-            }
+            this.soundManager.playBackgroundMusic('bgm_edited90s', 0);
             this.soundManager.startFootsteps();
             this.soundManager.resetTimeline();
         }
@@ -206,6 +211,7 @@ export class Game {
 
     returnToIdle() {
         this.gameState = 'IDLE';
+        if (this.pauseUI) this.pauseUI.visible = false;
 
         this.clearEntities();
 
@@ -347,19 +353,34 @@ export class Game {
         window.addEventListener('resize', () => {
             if (this.bgSprite) this.resizeBackground();
             this.resizeOverlay();
+            if (this.pauseUI) {
+                this.pauseUI.x = this.app.screen.width / 2;
+                this.pauseUI.y = this.app.screen.height - 40;
+            }
         });
 
         window.addEventListener('keydown', (e) => {
+            // Debug toggle
             if (e.key === '1') {
                 this.showDebug = !this.showDebug;
                 if (this.uiContainer) this.uiContainer.visible = this.showDebug;
             }
-            if (e.code === 'Space' && this.gameState === 'IDLE') {
-                // Resume audio context on user gesture
-                if (this.soundManager) {
-                    this.soundManager.resumeAudioContext();
+
+            // Space: start from IDLE, or toggle pause during play
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (this.soundManager) this.soundManager.resumeAudioContext();
+                if (this.gameState === 'IDLE') {
+                    this.startGame();
+                } else if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                    this.togglePause();
                 }
-                this.startGame();
+                return;
+            }
+
+            // 9 = skip to end / trigger kill-all and return to IDLE
+            if (e.key === '9' && (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED')) {
+                this.endGame();
             }
         });
     }
@@ -406,20 +427,29 @@ export class Game {
 
                 switch (payload.command) {
                     case 'start':
+                        // Start the game from IDLE
                         if (this.gameState === 'IDLE') {
-                            // Resume audio context (browsers require a user-gesture for audio;
-                            // the initial click to open the browser counts, so this should be fine)
-                            if (this.soundManager) {
-                                this.soundManager.resumeAudioContext();
-                            }
+                            if (this.soundManager) this.soundManager.resumeAudioContext();
                             this.startGame();
-                        } else {
-                            console.log('[UDP Bridge] "start" ignored — game is not IDLE (state:', this.gameState, ')');
                         }
                         break;
 
-                    case 'reset':
-                        this.returnToIdle();
+                    case 'pause':
+                        // Toggle pause/resume; also starts from IDLE
+                        if (this.soundManager) this.soundManager.resumeAudioContext();
+                        if (this.gameState === 'IDLE') {
+                            this.startGame();
+                        } else if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                            this.togglePause();
+                        }
+                        break;
+
+                    case 'end':
+                    case '9':
+                        // Skip to end / trigger kill-all / return to IDLE
+                        if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
+                            this.endGame();
+                        }
                         break;
 
                     default:
@@ -440,6 +470,58 @@ export class Game {
         };
 
         connect();
+    }
+
+    /**
+     * Toggles between ACTIVE and PAUSED.
+     * While paused the game loop skips all simulation updates so the scene freezes.
+     */
+    togglePause() {
+        if (this.gameState === 'ACTIVE') {
+            this.pausedAtGameTime = this.gameTime;
+            this.gameState = 'PAUSED';
+            if (this.pauseUI) this.pauseUI.visible = true;
+            // Freeze audio exactly where it is
+            if (this.soundManager) this.soundManager.pauseMusic();
+            console.log(`[Game] Paused at ${this.pausedAtGameTime.toFixed(2)}s`);
+        } else if (this.gameState === 'PAUSED') {
+            // Shift gameStartTime so the clock continues from pausedAtGameTime
+            this.gameStartTime = Date.now() - this.pausedAtGameTime * 1000;
+            this.gameState = 'ACTIVE';
+            if (this.pauseUI) this.pauseUI.visible = false;
+            // Resume audio from the exact position it was frozen at
+            if (this.soundManager) this.soundManager.resumeMusic();
+            console.log(`[Game] Resumed from ${this.pausedAtGameTime.toFixed(2)}s`);
+        }
+    }
+
+    /**
+     * Immediately triggers the kill-all sequence (starting at 85s) and
+     * then returns to IDLE naturally after the explosion window.
+     * Bound to keyboard key '9' and UDP commands 'end' / '9'.
+     */
+    endGame() {
+        if (this.gameState === 'PAUSED') {
+            // Unfreeze first so entities are visible for explosions
+            this.gameStartTime = Date.now() - this.pausedAtGameTime * 1000;
+            this.gameState = 'ACTIVE';
+        }
+
+        // Fast-forward the clock to the kill trigger point.
+        // This triggers the ALIEN_KILL_TRIGGER logic (85s) in the next frame.
+        const triggerTime = CONFIG.TIMELINE.ALIEN_KILL_TRIGGER;
+        this.gameStartTime = Date.now() - triggerTime * 1000;
+        this.gameTime = triggerTime;
+        this.alienKillTriggered = false; // Re-arm so the trigger fires
+
+        // Cleanup audio: skip past earlier scheduled lines, but don't mute yet
+        // so we can still hear the final explosion/death symphony.
+        if (this.soundManager) {
+            this.soundManager.skipTimelineTo(triggerTime, CONFIG.SCHEDULED_SOUNDS);
+            this.soundManager.stopMusic(); // Stops BGM and active SFX (grunts etc)
+        }
+
+        console.log(`[Game] endGame() — skipping to ${triggerTime}s for kill-all sequence`);
     }
 
     setupDebugUI() {
@@ -463,6 +545,45 @@ export class Game {
         this.countText.x = 10;
         this.countText.y = 30;
         this.uiContainer.addChild(this.countText);
+    }
+
+    setupGameUI() {
+        this.pauseUI = new PIXI.Container();
+        this.pauseUI.visible = false;
+
+        // 1. Draw Pause Icon (Two sharp bars)
+        const icon = new PIXI.Graphics();
+        icon.beginFill(0xff0000);
+        // Left bar
+        icon.drawRoundedRect(-22, -15, 8, 30, 2);
+        // Right bar
+        icon.drawRoundedRect(-6, -15, 8, 30, 2);
+        icon.endFill();
+
+        // 2. Pause Text
+        const pauseStyle = new PIXI.TextStyle({
+            fill: '#ff0000',
+            fontFamily: 'monospace',
+            fontSize: 28,
+            fontWeight: 'bold',
+            dropShadow: true,
+            dropShadowColor: '#000000',
+            dropShadowBlur: 4,
+            dropShadowDistance: 0
+        });
+
+        const text = new PIXI.Text('PAUSED', pauseStyle);
+        text.anchor.set(0, 0.5);
+        text.x = 10; // Offset from icon
+
+        this.pauseUI.addChild(icon);
+        this.pauseUI.addChild(text);
+
+        // Position at bottom middle
+        this.pauseUI.x = this.app.screen.width / 2;
+        this.pauseUI.y = this.app.screen.height - 40;
+
+        this.app.stage.addChild(this.pauseUI);
     }
 
     gameLoop(delta) {
@@ -490,7 +611,8 @@ export class Game {
             this.spaceship.update(delta);
         }
 
-        if (this.gameState === 'IDLE') {
+        // Both IDLE and PAUSED skip all simulation logic
+        if (this.gameState === 'IDLE' || this.gameState === 'PAUSED') {
             return;
         }
 
@@ -521,11 +643,13 @@ export class Game {
             this.pirates = [];
 
             if (this.soundManager) {
-                if (livingPirates > 0) {
+                // If we forced the end via the '9' key, alienMuted will already be true.
+                // In that case, we skip the final explosion/death symphony for a cleaner exit.
+                if (!this.soundManager.alienMuted && livingPirates > 0) {
                     this.soundManager.playExplosion();
                     this.soundManager.playAlienDeath(0);
                 }
-                // Fully mute all alien related sounds (footsteps, grunts, death, etc.)
+                // Ensure everything is muted going forward
                 this.soundManager.muteAlienSounds();
             }
         }
