@@ -50,6 +50,7 @@ export class Game {
         this.showDebug = false;
         this.fpsText = null;
         this.countText = null;
+        this.pauseUI = null;
 
         this.bgSprite = null;
         this.overlaySprite = null;
@@ -123,7 +124,8 @@ export class Game {
             'assets/audio/rex1.mp3',
             'assets/audio/rex2.mp3',
             'assets/audio/rex3.mp3',
-            'assets/audio/rex4.mp3'
+            'assets/audio/rex4.mp3',
+            'assets/audio/bgm_edited90s.wav'
         ];
         if (this.soundManager) {
             await this.soundManager.preloadAudio(audioAssets);
@@ -132,6 +134,7 @@ export class Game {
         // Start Game
         this.uiContainer.removeChild(loadingText);
         this.setupDebugUI();
+        this.setupGameUI();
         this.uiContainer.visible = false;
 
         // Init Game entities
@@ -166,6 +169,7 @@ export class Game {
 
     startGame() {
         this.gameState = 'ACTIVE';
+        if (this.pauseUI) this.pauseUI.visible = false;
         this.gameStartTime = Date.now();
         this.gameTime = 0;
 
@@ -188,9 +192,7 @@ export class Game {
             this.soundManager.stopMusic();
             this.musicStarted = true;
             this.musicFadingOut = false;
-            if (resources.music) {
-                this.soundManager.playBackgroundMusic(resources.music, 0);
-            }
+            this.soundManager.playBackgroundMusic('bgm_edited90s', 0);
             this.soundManager.startFootsteps();
             this.soundManager.resetTimeline();
         }
@@ -209,6 +211,7 @@ export class Game {
 
     returnToIdle() {
         this.gameState = 'IDLE';
+        if (this.pauseUI) this.pauseUI.visible = false;
 
         this.clearEntities();
 
@@ -279,27 +282,6 @@ export class Game {
         // Track which pointers are currently held down so pointermove can fire as taps
         this.activePointers = new Set();
 
-        // ── One-shot HTML <audio> unlock ──────────────────────────────────────
-        // The browser's autoplay policy gates HTML audio independently from the
-        // Web Audio API.  We need to call .play() from inside a genuine user-
-        // gesture handler at least once to "unlock" the element, after which it
-        // can be played freely (including from UDP-triggered code paths).
-        let musicUnlocked = false;
-        const unlockMusic = () => {
-            if (musicUnlocked || !resources.music) return;
-            musicUnlocked = true;
-            // Silent play → immediate pause convinces the browser the element is
-            // user-approved for the rest of this page session.
-            const p = resources.music.play();
-            if (p !== undefined) {
-                p.then(() => {
-                    resources.music.pause();
-                    resources.music.currentTime = 0;
-                }).catch(() => { /* still blocked — user hasn't interacted enough yet */ });
-            }
-        };
-        // ─────────────────────────────────────────────────────────────────────
-
         // touchstart: preventDefault only — no queueing (avoids double input with pointerdown)
         c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false, capture: true });
 
@@ -319,8 +301,6 @@ export class Game {
             if (this.soundManager) {
                 this.soundManager.resumeAudioContext();
             }
-            // Unlock HTML <audio> element on first real touch/click
-            unlockMusic();
 
             if (this.gameState === 'IDLE') {
                 return;
@@ -373,12 +353,13 @@ export class Game {
         window.addEventListener('resize', () => {
             if (this.bgSprite) this.resizeBackground();
             this.resizeOverlay();
+            if (this.pauseUI) {
+                this.pauseUI.x = this.app.screen.width / 2;
+                this.pauseUI.y = this.app.screen.height - 40;
+            }
         });
 
         window.addEventListener('keydown', (e) => {
-            // Unlock HTML <audio> on first keyboard interaction (same gesture gate as pointerdown)
-            unlockMusic();
-
             // Debug toggle
             if (e.key === '1') {
                 this.showDebug = !this.showDebug;
@@ -499,6 +480,7 @@ export class Game {
         if (this.gameState === 'ACTIVE') {
             this.pausedAtGameTime = this.gameTime;
             this.gameState = 'PAUSED';
+            if (this.pauseUI) this.pauseUI.visible = true;
             // Freeze audio exactly where it is
             if (this.soundManager) this.soundManager.pauseMusic();
             console.log(`[Game] Paused at ${this.pausedAtGameTime.toFixed(2)}s`);
@@ -506,6 +488,7 @@ export class Game {
             // Shift gameStartTime so the clock continues from pausedAtGameTime
             this.gameStartTime = Date.now() - this.pausedAtGameTime * 1000;
             this.gameState = 'ACTIVE';
+            if (this.pauseUI) this.pauseUI.visible = false;
             // Resume audio from the exact position it was frozen at
             if (this.soundManager) this.soundManager.resumeMusic();
             console.log(`[Game] Resumed from ${this.pausedAtGameTime.toFixed(2)}s`);
@@ -513,8 +496,8 @@ export class Game {
     }
 
     /**
-     * Immediately triggers the kill-all sequence (same as reaching 85s) and
-     * then returns to IDLE after the short explosion window.
+     * Immediately triggers the kill-all sequence (starting at 85s) and
+     * then returns to IDLE naturally after the explosion window.
      * Bound to keyboard key '9' and UDP commands 'end' / '9'.
      */
     endGame() {
@@ -524,22 +507,21 @@ export class Game {
             this.gameState = 'ACTIVE';
         }
 
-        // Fast-forward the clock to the very end of the game.
-        // This triggers the ALIEN_KILL_TRIGGER logic (at 85s) and immediately
-        // hits the GAME_END logic (at 93s) in the next block of the game loop.
-        const endTime = CONFIG.TIMELINE.GAME_END;
-        this.gameStartTime = Date.now() - endTime * 1000;
-        this.gameTime = endTime;
-        this.alienKillTriggered = false; // Re-arm so the trigger fires once before we exit gameplay
+        // Fast-forward the clock to the kill trigger point.
+        // This triggers the ALIEN_KILL_TRIGGER logic (85s) in the next frame.
+        const triggerTime = CONFIG.TIMELINE.ALIEN_KILL_TRIGGER;
+        this.gameStartTime = Date.now() - triggerTime * 1000;
+        this.gameTime = triggerTime;
+        this.alienKillTriggered = false; // Re-arm so the trigger fires
 
-        // Prevent "audio dump" of scheduled Rex lines and cut background music immediately
+        // Cleanup audio: skip past earlier scheduled lines, but don't mute yet
+        // so we can still hear the final explosion/death symphony.
         if (this.soundManager) {
-            this.soundManager.skipTimelineTo(endTime, CONFIG.SCHEDULED_SOUNDS);
-            this.soundManager.stopMusic();
-            this.soundManager.muteAlienSounds(); // Mute grunts/death sounds immediately
+            this.soundManager.skipTimelineTo(triggerTime, CONFIG.SCHEDULED_SOUNDS);
+            this.soundManager.stopMusic(); // Stops BGM and active SFX (grunts etc)
         }
 
-        console.log('[Game] endGame() — forcing kill-all sequence');
+        console.log(`[Game] endGame() — skipping to ${triggerTime}s for kill-all sequence`);
     }
 
     setupDebugUI() {
@@ -563,6 +545,45 @@ export class Game {
         this.countText.x = 10;
         this.countText.y = 30;
         this.uiContainer.addChild(this.countText);
+    }
+
+    setupGameUI() {
+        this.pauseUI = new PIXI.Container();
+        this.pauseUI.visible = false;
+
+        // 1. Draw Pause Icon (Two sharp bars)
+        const icon = new PIXI.Graphics();
+        icon.beginFill(0xff0000);
+        // Left bar
+        icon.drawRoundedRect(-22, -15, 8, 30, 2);
+        // Right bar
+        icon.drawRoundedRect(-6, -15, 8, 30, 2);
+        icon.endFill();
+
+        // 2. Pause Text
+        const pauseStyle = new PIXI.TextStyle({
+            fill: '#ff0000',
+            fontFamily: 'monospace',
+            fontSize: 28,
+            fontWeight: 'bold',
+            dropShadow: true,
+            dropShadowColor: '#000000',
+            dropShadowBlur: 4,
+            dropShadowDistance: 0
+        });
+
+        const text = new PIXI.Text('PAUSED', pauseStyle);
+        text.anchor.set(0, 0.5);
+        text.x = 10; // Offset from icon
+
+        this.pauseUI.addChild(icon);
+        this.pauseUI.addChild(text);
+
+        // Position at bottom middle
+        this.pauseUI.x = this.app.screen.width / 2;
+        this.pauseUI.y = this.app.screen.height - 40;
+
+        this.app.stage.addChild(this.pauseUI);
     }
 
     gameLoop(delta) {
