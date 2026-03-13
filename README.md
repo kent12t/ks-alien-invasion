@@ -27,7 +27,7 @@ Alien Invasion is an interactive browser-based game designed for **Hokuyo LIDAR*
    ```bash
    ./send_udp_start.bat
    ```
-   *Supported Commands:* `start`, `0`, `pause`, `end`, `9`, `reset`.
+   *Supported Commands:* `start`, `pause`, `end`, `9`.
 
 ---
 
@@ -54,17 +54,16 @@ A control path allows external hardware or scripts to control the game state:
 
 ## 🎮 Controls & State Management
 
-| Action | Keyboard | UDP Command |
-| :--- | :--- | :--- |
-| **Start Game** | `Space` or `0` (when IDLE) | `start` or `0` |
-| **Pause / Resume** | `Space` (during play) | `pause` |
-| **Force End Game** | `9` (during play) | `end` or `9` |
-| **Return to IDLE** | — | `reset` |
-| **Toggle Debug** | `1` | — |
+| Action               | Keyboard                 | UDP Command |
+| :------------------- | :----------------------- | :---------- |
+| **Start Game**       | `Space` (when IDLE)      | `start`     |
+| **Pause / Resume**   | `Space` (during play)    | `pause`     |
+| **End Game / Reset** | `9` (during play/paused) | `end`       |
+| **Toggle Debug**     | `1`                      | —           |
 
 ### Game State Controller
 - **Pause/Resume**: Freezes the simulation and the game clock. HTML Audio is synced precisely to pause and resume from the exact same timestamp.
-- **Immediate End**: The `end` command fast-forwards the clock to the kill-trigger (85s), triggering the bombastic explosion sequence and boss defeat before returning to IDLE.
+- **Immediate End**: The `9` command fast-forwards the clock to the absolute end (93s), triggering alien explosions and immediately returning to the IDLE screen.
 - **Audio Unlocking**: Implements a one-shot "user-gesture" unlock for HTML Audio on the first interaction, ensuring UDP-triggered music playback works reliably in commercial/kiosk browsers.
 
 ---

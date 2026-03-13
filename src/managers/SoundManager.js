@@ -180,6 +180,20 @@ export default class SoundManager {
         this.alienMuted = false;
     }
 
+    /**
+     * Marks all scheduled events before the given time as "played" so they don't
+     * all trigger at once when the game clock jumps forward (scrubbing/ending).
+     */
+    skipTimelineTo(gameTime, scheduledSounds = {}) {
+        if (!this.audioContext) return;
+        for (const timeStr of Object.keys(scheduledSounds)) {
+            const triggerTime = parseFloat(timeStr);
+            if (gameTime >= triggerTime) {
+                this.timelineEvents.add(timeStr);
+            }
+        }
+    }
+
     // Update mixing volume dynamically
     setVolume(type, value) {
         if (this.volumes[type] !== undefined) {
@@ -395,7 +409,7 @@ export default class SoundManager {
         if (!this.backgroundMusic) return;
         const playPromise = this.backgroundMusic.play();
         if (playPromise !== undefined) {
-            playPromise.catch(() => {/* silently ignore if still blocked */});
+            playPromise.catch(() => {/* silently ignore if still blocked */ });
         }
         // Restore footstep gain — the normal updateFootstepVolume will take over next frame
         if (this.footstepGain && this.audioContext) {
@@ -415,6 +429,10 @@ export default class SoundManager {
         // Mute footstep gain immediately
         if (this.footstepGain) {
             this.footstepGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+        }
+        // Mute alien grunt/death bus immediately
+        if (this.alienGain) {
+            this.alienGain.gain.setValueAtTime(0, this.audioContext.currentTime);
         }
         // Stop footstep source if running
         if (this.footstepSource) {

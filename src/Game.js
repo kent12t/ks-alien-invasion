@@ -397,13 +397,6 @@ export class Game {
                 return;
             }
 
-            // 0 = start (IDLE only)
-            if (e.key === '0' && this.gameState === 'IDLE') {
-                if (this.soundManager) this.soundManager.resumeAudioContext();
-                this.startGame();
-                return;
-            }
-
             // 9 = skip to end / trigger kill-all and return to IDLE
             if (e.key === '9' && (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED')) {
                 this.endGame();
@@ -453,13 +446,10 @@ export class Game {
 
                 switch (payload.command) {
                     case 'start':
-                    case '0':
-                        // '0' and 'start' both start the game from IDLE
+                        // Start the game from IDLE
                         if (this.gameState === 'IDLE') {
                             if (this.soundManager) this.soundManager.resumeAudioContext();
                             this.startGame();
-                        } else {
-                            console.log('[UDP Bridge] "start" ignored — game is not IDLE (state:', this.gameState, ')');
                         }
                         break;
 
@@ -475,14 +465,10 @@ export class Game {
 
                     case 'end':
                     case '9':
-                        // Skip to end / trigger kill-all
+                        // Skip to end / trigger kill-all / return to IDLE
                         if (this.gameState === 'ACTIVE' || this.gameState === 'PAUSED') {
                             this.endGame();
                         }
-                        break;
-
-                    case 'reset':
-                        this.returnToIdle();
                         break;
 
                     default:
@@ -538,12 +524,20 @@ export class Game {
             this.gameState = 'ACTIVE';
         }
 
-        // Fast-forward the clock past ALIEN_KILL_TRIGGER so the existing kill
-        // logic fires naturally on the very next game-loop tick.
-        const killTime = CONFIG.TIMELINE.ALIEN_KILL_TRIGGER;
-        this.gameStartTime = Date.now() - killTime * 1000;
-        this.gameTime = killTime;
-        this.alienKillTriggered = false; // Re-arm so the trigger fires
+        // Fast-forward the clock to the very end of the game.
+        // This triggers the ALIEN_KILL_TRIGGER logic (at 85s) and immediately
+        // hits the GAME_END logic (at 93s) in the next block of the game loop.
+        const endTime = CONFIG.TIMELINE.GAME_END;
+        this.gameStartTime = Date.now() - endTime * 1000;
+        this.gameTime = endTime;
+        this.alienKillTriggered = false; // Re-arm so the trigger fires once before we exit gameplay
+
+        // Prevent "audio dump" of scheduled Rex lines and cut background music immediately
+        if (this.soundManager) {
+            this.soundManager.skipTimelineTo(endTime, CONFIG.SCHEDULED_SOUNDS);
+            this.soundManager.stopMusic();
+            this.soundManager.muteAlienSounds(); // Mute grunts/death sounds immediately
+        }
 
         console.log('[Game] endGame() — forcing kill-all sequence');
     }
@@ -628,11 +622,13 @@ export class Game {
             this.pirates = [];
 
             if (this.soundManager) {
-                if (livingPirates > 0) {
+                // If we forced the end via the '9' key, alienMuted will already be true.
+                // In that case, we skip the final explosion/death symphony for a cleaner exit.
+                if (!this.soundManager.alienMuted && livingPirates > 0) {
                     this.soundManager.playExplosion();
                     this.soundManager.playAlienDeath(0);
                 }
-                // Fully mute all alien related sounds (footsteps, grunts, death, etc.)
+                // Ensure everything is muted going forward
                 this.soundManager.muteAlienSounds();
             }
         }
