@@ -66,6 +66,10 @@ start "" "%EDGE_PATH%" ^
   --no-first-run ^
   --kiosk "http://localhost:3000"
 
+:: Simulate startup clicks to improve browser audio unlock reliability
+echo [INFO] Scheduling startup click for audio unlock...
+start "" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0SimulateStartupClick.ps1"
+
 echo [INFO] Starting Node.js server...
 echo [INFO] Game URL : http://localhost:3000
 echo.

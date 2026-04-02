@@ -65,6 +65,7 @@ A control path allows external hardware or scripts to control the game state:
 - **Pause/Resume**: Freezes the simulation and the game clock. HTML Audio is synced precisely to pause and resume from the exact same timestamp.
 - **Immediate End**: The `9` command fast-forwards the clock to the absolute end (93s), triggering alien explosions and immediately returning to the IDLE screen.
 - **Audio Unlocking**: Implements a one-shot "user-gesture" unlock for HTML Audio on the first interaction, ensuring UDP-triggered music playback works reliably in commercial/kiosk browsers.
+- **Kiosk Startup Fallback**: `start_game.bat` also schedules an automated center-screen click as a backup unlock gesture when no physical touch occurs during boot.
 
 ---
 
@@ -116,6 +117,7 @@ The game is highly tunable via `src/config.js`. Key parameters include:
 ├── index.html              # Canvas container & PixiJS loader
 ├── style.css               # Layout & touch-normalization
 ├── start_game.bat          # Utility to boot the server
+├── SimulateStartupClick.ps1 # Startup fallback click for browser audio unlock
 └── send_udp_start.bat      # Utility to test UDP triggers
 ```
 
