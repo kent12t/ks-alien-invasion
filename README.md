@@ -1,10 +1,23 @@
 <div align="center">
   <img src="thumbs.png" alt="Alien Invasion" width="320">
-  <h1>Alien Invasion — Touch Tester</h1>
-  <p><em>LIDAR / TUIO optimized interactive game with 2.5D projection</em></p>
+  <h1>Alien Invasion</h1>
+  <p><em>The LiDAR boss fight from Galilean Mission</em></p>
 </div>
 
-Alien Invasion is an interactive browser-based game designed for **Hokuyo LIDAR** + **TUIO** setups. It features a responsive input system where physical impacts on a projected surface are translated into game actions.
+Alien Invasion is the final battle of **Galilean Mission**, a 20-minute space mission at KidsSTOP, Science Centre Singapore (March to October 2026). Children crew a ship to Jupiter's moons, then defend it by throwing balls at a projection wall while a Hokuyo LiDAR sensor tracks where they land. The team reported 19,177 participants over the run.
+
+This repository is the browser game that runs on that wall, plus a small Node.js server that lets show-control hardware start, pause, and end it. The rest of the exhibit (the story, the room, the media server and show control) is not in this repo.
+
+Case study: [kentlimanza.co/work/galilean-mission](https://kentlimanza.co/work/galilean-mission)
+
+## What's here
+
+- A PixiJS game with a 2.5D projection: aliens walk from the back of the room toward the front line, and a thrown ball is a pointer event at the point where it hit.
+- An input queue built so that hits aren't dropped on heavy frames.
+- A state controller (start, pause, end) driven by keyboard or UDP, with Web Audio that pauses and resumes in step with the game clock.
+- Windows kiosk scripts that launch the game unattended, including a startup click so the browser allows audio.
+
+It also runs on a normal desktop: the game listens for pointer events, so a mouse or touchscreen works for testing without any LiDAR.
 
 ---
 
@@ -132,3 +145,12 @@ The game is highly tunable via `src/config.js`. Key parameters include:
 2. **Batch Loading**: Asset sequences are pre-loaded to prevent "pop-in" during gameplay.
 3. **Layering**: Separate `PIXI.Container` layers for Shadows, Entities, and UI to minimize z-sort recalculations.
 4. **Touch Action**: `touch-action: none` on the canvas to eliminate the browser's 300ms tap delay.
+
+---
+
+## Credits
+
+- **Kesh** built the baseline gameplay, the Pixi.js migration, the waves and stages, and the early asset work.
+- **Kent** ([@kent12t](https://github.com/kent12t)) wrote the multitouch input handling, the UDP-to-WebSocket control bridge, the game-state controller, the move to Web Audio, the kiosk startup scripts, and changes that came out of playtesting with children.
+- Graphics, assets, and spatial design for the exhibit were by Clarita; the media server and show control were connected by an external team.
+- `LidarCalibSoftware/` is a third-party LiDAR calibration and multitouch tool (Windows binaries) that turns sensor data into touch input. It is not my work and carries its own licences; see `LidarCalibSoftware/multitouch/doc/`.
